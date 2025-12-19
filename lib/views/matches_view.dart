@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/swipe_viewmodel.dart';
 import '../models/movie.dart';
+import 'movie_detail_view.dart';
 
 class MatchesView extends StatelessWidget {
   const MatchesView({Key? key}) : super(key: key);
@@ -19,7 +20,6 @@ class MatchesView extends StatelessWidget {
       ),
       body: Consumer<SwipeViewModel>(
         builder: (context, viewModel, child) {
-          // Loading state
           if (viewModel.isLoadingLikedMovies) {
             return const Center(
               child: Column(
@@ -27,21 +27,16 @@ class MatchesView extends StatelessWidget {
                 children: [
                   CircularProgressIndicator(color: Colors.purple),
                   SizedBox(height: 16),
-                  Text(
-                    'Loading your matches...',
-                    style: TextStyle(color: Colors.grey),
-                  ),
+                  Text('Loading your matches...', style: TextStyle(color: Colors.grey)),
                 ],
               ),
             );
           }
 
-          // Empty state
           if (viewModel.likedMovies.isEmpty) {
             return _buildEmptyState();
           }
 
-          // Grid of liked movies
           return GridView.builder(
             padding: const EdgeInsets.all(16),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -70,10 +65,7 @@ class MatchesView extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             'No matches yet',
-            style: TextStyle(
-              color: Colors.grey[400],
-              fontSize: 18,
-            ),
+            style: TextStyle(color: Colors.grey[400], fontSize: 18),
           ),
           const SizedBox(height: 8),
           Text(
@@ -87,6 +79,15 @@ class MatchesView extends StatelessWidget {
 
   Widget _buildMovieTile(BuildContext context, Movie movie, SwipeViewModel viewModel) {
     return GestureDetector(
+      onTap: () {
+        // Öppna filmdetaljer med recensioner
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MovieDetailView(movie: movie),
+          ),
+        );
+      },
       onLongPress: () {
         _showRemoveDialog(context, movie, viewModel);
       },
@@ -160,21 +161,11 @@ class MatchesView extends StatelessWidget {
                           const SizedBox(width: 4),
                           Text(
                             movie.rating.toStringAsFixed(1),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                            ),
+                            style: const TextStyle(color: Colors.white, fontSize: 12),
                           ),
-                          if (movie.year > 0) ...[
-                            const SizedBox(width: 8),
-                            Text(
-                              movie.year.toString(),
-                              style: TextStyle(
-                                color: Colors.grey[400],
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
+                          const Spacer(),
+                          // Review indicator
+                          const Icon(Icons.rate_review, size: 14, color: Colors.purple),
                         ],
                       ),
                     ],
@@ -193,6 +184,23 @@ class MatchesView extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.favorite, color: Colors.white, size: 16),
+                ),
+              ),
+
+              // Tap hint
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Tap for details',
+                    style: TextStyle(color: Colors.white, fontSize: 8),
+                  ),
                 ),
               ),
             ],
