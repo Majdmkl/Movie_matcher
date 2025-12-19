@@ -9,8 +9,7 @@ class AuthViewModel extends ChangeNotifier {
   AppUser? _currentUser;
   bool _isLoading = false;
   String? _error;
-  
-  // Friends
+
   List<AppUser> _friends = [];
   bool _isLoadingFriends = false;
 
@@ -18,26 +17,24 @@ class AuthViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isLoggedIn => _currentUser != null;
-  
+
   List<AppUser> get friends => _friends;
   bool get isLoadingFriends => _isLoadingFriends;
 
-  // Initiera
   Future<void> initialize() async {
     _isLoading = true;
     notifyListeners();
 
     try {
       final firebaseUser = _authService.currentFirebaseUser;
-      
+
       if (firebaseUser != null) {
         _currentUser = await _authService.getUser(firebaseUser.uid);
-        
-        // Ladda vänner
+
         if (_currentUser != null && _currentUser!.friendIds.isNotEmpty) {
           await loadFriends();
         }
-        
+
         print('✅ User restored: ${_currentUser?.email}');
       }
     } catch (e) {
@@ -48,7 +45,6 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  // Registrera
   Future<bool> register({
     required String email,
     required String password,
@@ -81,7 +77,6 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  // Logga in
   Future<bool> login({
     required String email,
     required String password,
@@ -96,7 +91,6 @@ class AuthViewModel extends ChangeNotifier {
         password: password,
       );
 
-      // Ladda vänner efter inloggning
       if (_currentUser != null && _currentUser!.friendIds.isNotEmpty) {
         await loadFriends();
       }
@@ -117,7 +111,6 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  // Logga ut
   Future<void> logout() async {
     await _authService.logout();
     _currentUser = null;
@@ -125,20 +118,18 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Lägg till liked movie
-  void addLikedMovie(int movieId) {
+  void addLikedItem(String uniqueId) {
     if (_currentUser == null) return;
 
-    if (!_currentUser!.likedMovieIds.contains(movieId)) {
-      final updatedLikes = List<int>.from(_currentUser!.likedMovieIds)..add(movieId);
+    if (!_currentUser!.likedMovieIds.contains(uniqueId)) {
+      final updatedLikes = List<String>.from(_currentUser!.likedMovieIds)..add(uniqueId);
       _currentUser = _currentUser!.copyWith(likedMovieIds: updatedLikes);
       notifyListeners();
 
-      _authService.addLikedMovie(_currentUser!.id, movieId);
+      _authService.addLikedItem(_currentUser!.id, uniqueId);
     }
   }
 
-  // Uppdatera namn
   void updateName(String newName) {
     if (_currentUser == null) return;
 
@@ -150,7 +141,6 @@ class AuthViewModel extends ChangeNotifier {
 
   // === FRIENDS ===
 
-  // Ladda vänner
   Future<void> loadFriends() async {
     if (_currentUser == null) return;
 
@@ -168,17 +158,15 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Sök användare
   Future<AppUser?> searchUser(String email) async {
     if (email.trim().isEmpty) return null;
     return await _authService.searchUserByEmail(email);
   }
 
-  // Lägg till vän
   Future<bool> addFriend(AppUser friend) async {
     if (_currentUser == null) return false;
-    if (_currentUser!.id == friend.id) return false; // Kan inte lägga till sig själv
-    if (_currentUser!.friendIds.contains(friend.id)) return false; // Redan vän
+    if (_currentUser!.id == friend.id) return false;
+    if (_currentUser!.friendIds.contains(friend.id)) return false;
 
     final success = await _authService.addFriend(_currentUser!.id, friend.id);
 
@@ -192,7 +180,6 @@ class AuthViewModel extends ChangeNotifier {
     return success;
   }
 
-  // Ta bort vän
   Future<bool> removeFriend(String friendId) async {
     if (_currentUser == null) return false;
 
@@ -208,7 +195,6 @@ class AuthViewModel extends ChangeNotifier {
     return success;
   }
 
-  // Hämta uppdaterad vändata (för att se deras senaste likes)
   Future<AppUser?> getFriendDetails(String friendId) async {
     return await _authService.getUser(friendId);
   }

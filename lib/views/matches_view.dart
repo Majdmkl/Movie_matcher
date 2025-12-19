@@ -4,8 +4,27 @@ import '../viewmodels/swipe_viewmodel.dart';
 import '../models/movie.dart';
 import 'movie_detail_view.dart';
 
-class MatchesView extends StatelessWidget {
+class MatchesView extends StatefulWidget {
   const MatchesView({Key? key}) : super(key: key);
+
+  @override
+  State<MatchesView> createState() => _MatchesViewState();
+}
+
+class _MatchesViewState extends State<MatchesView> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -13,14 +32,29 @@ class MatchesView extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
-          'Your Matches',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: const Text('Your Matches', style: TextStyle(fontWeight: FontWeight.bold)),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.purple,
+          labelColor: Colors.purple,
+          unselectedLabelColor: Colors.grey,
+          tabs: [
+            Consumer<SwipeViewModel>(
+              builder: (context, vm, _) => Tab(
+                text: '🎬 Movies (${vm.likedMoviesCount})',
+              ),
+            ),
+            Consumer<SwipeViewModel>(
+              builder: (context, vm, _) => Tab(
+                text: '📺 TV Shows (${vm.likedTVShowsCount})',
+              ),
+            ),
+          ],
         ),
       ),
       body: Consumer<SwipeViewModel>(
         builder: (context, viewModel, child) {
-          if (viewModel.isLoadingLikedMovies) {
+          if (viewModel.isLoadingLiked) {
             return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -33,43 +67,58 @@ class MatchesView extends StatelessWidget {
             );
           }
 
-          if (viewModel.likedMovies.isEmpty) {
-            return _buildEmptyState();
-          }
-
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.65,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-            itemCount: viewModel.likedMovies.length,
-            itemBuilder: (context, index) {
-              final movie = viewModel.likedMovies[index];
-              return _buildMovieTile(context, movie, viewModel);
-            },
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              _buildGrid(viewModel.likedMovies, viewModel, 'movie'),
+              _buildGrid(viewModel.likedTVShows, viewModel, 'tv'),
+            ],
           );
         },
       ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildGrid(List<Movie> items, SwipeViewModel viewModel, String type) {
+    if (items.isEmpty) {
+      return _buildEmptyState(type);
+    }
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 0.65,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+      ),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return _buildItemTile(context, item, viewModel);
+      },
+    );
+  }
+
+  Widget _buildEmptyState(String type) {
+    final isMovie = type == 'movie';
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.favorite_border, size: 80, color: Colors.grey[600]),
+          Icon(
+            isMovie ? Icons.movie_outlined : Icons.tv_outlined,
+            size: 80,
+            color: Colors.grey[600],
+          ),
           const SizedBox(height: 16),
           Text(
-            'No matches yet',
+            isMovie ? 'No liked movies yet' : 'No liked TV shows yet',
             style: TextStyle(color: Colors.grey[400], fontSize: 18),
           ),
           const SizedBox(height: 8),
           Text(
-            'Start swiping to find movies you like!',
+            'Start swiping to find ${isMovie ? 'movies' : 'shows'} you like!',
             style: TextStyle(color: Colors.grey[600], fontSize: 14),
           ),
         ],
@@ -77,19 +126,20 @@ class MatchesView extends StatelessWidget {
     );
   }
 
-  Widget _buildMovieTile(BuildContext context, Movie movie, SwipeViewModel viewModel) {
+  Widget _buildItemTile(BuildContext context, Movie item, SwipeViewModel viewModel) {
+    final isTV = item.mediaType == 'tv';
+
     return GestureDetector(
       onTap: () {
-        // Öppna filmdetaljer med recensioner
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => MovieDetailView(movie: movie),
+            builder: (context) => MovieDetailView(movie: item),
           ),
         );
       },
       onLongPress: () {
-        _showRemoveDialog(context, movie, viewModel);
+        _showRemoveDialog(context, item, viewModel);
       },
       child: Container(
         decoration: BoxDecoration(
@@ -108,9 +158,9 @@ class MatchesView extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               // Poster
-              movie.posterUrl.isNotEmpty
+              item.posterUrl.isNotEmpty
                   ? Image.network(
-                      movie.posterUrl,
+                      item.posterUrl,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         return Container(
@@ -145,7 +195,7 @@ class MatchesView extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        movie.title,
+                        item.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -160,15 +210,35 @@ class MatchesView extends StatelessWidget {
                           const Icon(Icons.star, size: 14, color: Colors.amber),
                           const SizedBox(width: 4),
                           Text(
-                            movie.rating.toStringAsFixed(1),
+                            item.rating.toStringAsFixed(1),
                             style: const TextStyle(color: Colors.white, fontSize: 12),
                           ),
                           const Spacer(),
-                          // Review indicator
                           const Icon(Icons.rate_review, size: 14, color: Colors.purple),
                         ],
                       ),
                     ],
+                  ),
+                ),
+              ),
+
+              // Type badge
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isTV ? Colors.blue : Colors.purple,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    isTV ? 'TV' : 'MOVIE',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -186,23 +256,6 @@ class MatchesView extends StatelessWidget {
                   child: const Icon(Icons.favorite, color: Colors.white, size: 16),
                 ),
               ),
-
-              // Tap hint
-              Positioned(
-                top: 8,
-                left: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'Tap for details',
-                    style: TextStyle(color: Colors.white, fontSize: 8),
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -210,14 +263,14 @@ class MatchesView extends StatelessWidget {
     );
   }
 
-  void _showRemoveDialog(BuildContext context, Movie movie, SwipeViewModel viewModel) {
+  void _showRemoveDialog(BuildContext context, Movie item, SwipeViewModel viewModel) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
         title: const Text('Remove from matches?', style: TextStyle(color: Colors.white)),
         content: Text(
-          'Remove "${movie.title}" from your matches?',
+          'Remove "${item.title}" from your matches?',
           style: const TextStyle(color: Colors.grey),
         ),
         actions: [
@@ -227,7 +280,7 @@ class MatchesView extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () {
-              viewModel.removeLikedMovie(movie.id);
+              viewModel.removeLikedItem(item);
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),

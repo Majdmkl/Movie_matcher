@@ -80,16 +80,22 @@ class ProfileView extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _buildStatCard(
-                      'Liked',
-                      swipeViewModel.likedCount.toString(),
-                      Icons.favorite,
-                      Colors.red,
+                      'Movies',
+                      swipeViewModel.likedMoviesCount.toString(),
+                      Icons.movie,
+                      Colors.purple,
+                    ),
+                    _buildStatCard(
+                      'TV Shows',
+                      swipeViewModel.likedTVShowsCount.toString(),
+                      Icons.tv,
+                      Colors.blue,
                     ),
                     _buildStatCard(
                       'Friends',
                       (user?.friendIds.length ?? 0).toString(),
                       Icons.people,
-                      Colors.blue,
+                      Colors.green,
                     ),
                   ],
                 ),
@@ -125,7 +131,7 @@ class ProfileView extends StatelessWidget {
 
                 const SizedBox(height: 32),
 
-                // Success indicator
+                // Total liked
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   decoration: BoxDecoration(
@@ -133,14 +139,14 @@ class ProfileView extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: Colors.green),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.check_circle, color: Colors.green),
-                      SizedBox(width: 8),
+                      const Icon(Icons.check_circle, color: Colors.green),
+                      const SizedBox(width: 8),
                       Text(
-                        'Friends feature ready!',
-                        style: TextStyle(
+                        'Total liked: ${swipeViewModel.totalLikedCount}',
+                        style: const TextStyle(
                           color: Colors.green,
                           fontWeight: FontWeight.bold,
                         ),
@@ -158,27 +164,27 @@ class ProfileView extends StatelessWidget {
 
   Widget _buildStatCard(String label, String value, IconData icon, Color color) {
     return Container(
-      width: 140,
-      padding: const EdgeInsets.all(20),
+      width: 100,
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF1A1A1A),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: 30),
+          Icon(icon, color: color, size: 28),
           const SizedBox(height: 8),
           Text(
             value,
             style: const TextStyle(
-              fontSize: 24,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
               color: Colors.white,
             ),
           ),
           Text(
             label,
-            style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+            style: TextStyle(fontSize: 11, color: Colors.grey[400]),
           ),
         ],
       ),

@@ -25,6 +25,8 @@ class _MovieDetailViewState extends State<MovieDetailView> {
   Review? _myReview;
   bool _isLoading = true;
 
+  bool get isTV => widget.movie.mediaType == 'tv';
+
   @override
   void initState() {
     super.initState();
@@ -37,19 +39,16 @@ class _MovieDetailViewState extends State<MovieDetailView> {
     final authViewModel = context.read<AuthViewModel>();
     final currentUser = authViewModel.currentUser;
 
-    // Hämta vänners IDs + egen ID
     List<String> userIds = [];
     if (currentUser != null) {
       userIds = [currentUser.id, ...currentUser.friendIds];
     }
 
-    // Hämta recensioner för denna film
-    final allReviews = await _reviewService.getReviewsForMovie(widget.movie.id);
+    // Använd uniqueId för reviews (movie_123 eller tv_456)
+    final allReviews = await _reviewService.getReviewsForItem(widget.movie.uniqueId);
 
-    // Filtrera till endast vänner + egen
     _reviews = allReviews.where((r) => userIds.contains(r.userId)).toList();
 
-    // Hitta egen recension
     if (currentUser != null) {
       _myReview = _reviews.where((r) => r.userId == currentUser.id).firstOrNull;
     }
@@ -62,7 +61,6 @@ class _MovieDetailViewState extends State<MovieDetailView> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          // App bar med poster
           SliverAppBar(
             expandedHeight: 400,
             pinned: true,
@@ -71,23 +69,15 @@ class _MovieDetailViewState extends State<MovieDetailView> {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Poster
                   widget.movie.posterUrl.isNotEmpty
-                      ? Image.network(
-                          widget.movie.posterUrl,
-                          fit: BoxFit.cover,
-                        )
+                      ? Image.network(widget.movie.posterUrl, fit: BoxFit.cover)
                       : Container(color: const Color(0xFF1A1A1A)),
-                  // Gradient
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withOpacity(0.8),
-                        ],
+                        colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
                       ),
                     ),
                   ),
@@ -95,39 +85,45 @@ class _MovieDetailViewState extends State<MovieDetailView> {
               ),
             ),
           ),
-
-          // Content
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Type badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isTV ? Colors.blue : Colors.purple,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      isTV ? '📺 TV SHOW' : '🎬 MOVIE',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
                   // Title
                   Text(
                     widget.movie.title,
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                   const SizedBox(height: 12),
 
                   // Info row
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.purple.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(8),
+                      if (widget.movie.year > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(widget.movie.year.toString(), style: const TextStyle(color: Colors.white)),
                         ),
-                        child: Text(
-                          widget.movie.year.toString(),
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ),
                       const SizedBox(width: 12),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -174,13 +170,11 @@ class _MovieDetailViewState extends State<MovieDetailView> {
                   ),
                   const SizedBox(height: 32),
 
-                  // Write review button
                   if (widget.showWriteReview) ...[
                     _buildWriteReviewSection(),
                     const SizedBox(height: 24),
                   ],
 
-                  // Reviews section
                   _buildReviewsSection(),
                 ],
               ),
@@ -208,18 +202,13 @@ class _MovieDetailViewState extends State<MovieDetailView> {
               const SizedBox(width: 8),
               Text(
                 _myReview != null ? 'Your Review' : 'Write a Review',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ],
           ),
           const SizedBox(height: 12),
 
           if (_myReview != null) ...[
-            // Visa befintlig recension
             Row(
               children: List.generate(5, (index) {
                 return Icon(
@@ -230,10 +219,7 @@ class _MovieDetailViewState extends State<MovieDetailView> {
               }),
             ),
             const SizedBox(height: 8),
-            Text(
-              _myReview!.comment,
-              style: TextStyle(color: Colors.grey[300]),
-            ),
+            Text(_myReview!.comment, style: TextStyle(color: Colors.grey[300])),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -263,7 +249,6 @@ class _MovieDetailViewState extends State<MovieDetailView> {
               ],
             ),
           ] else ...[
-            // Knapp för att skriva ny recension
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -285,7 +270,6 @@ class _MovieDetailViewState extends State<MovieDetailView> {
   }
 
   Widget _buildReviewsSection() {
-    // Filtrera bort egen recension från listan
     final friendReviews = _reviews.where((r) => r.userId != context.read<AuthViewModel>().currentUser?.id).toList();
 
     return Column(
@@ -297,11 +281,7 @@ class _MovieDetailViewState extends State<MovieDetailView> {
             const SizedBox(width: 8),
             Text(
               'Friend Reviews (${friendReviews.length})',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -321,10 +301,7 @@ class _MovieDetailViewState extends State<MovieDetailView> {
                 children: [
                   Icon(Icons.chat_bubble_outline, size: 40, color: Colors.grey[600]),
                   const SizedBox(height: 8),
-                  Text(
-                    'No friend reviews yet',
-                    style: TextStyle(color: Colors.grey[400]),
-                  ),
+                  Text('No friend reviews yet', style: TextStyle(color: Colors.grey[400])),
                 ],
               ),
             ),
@@ -361,18 +338,11 @@ class _MovieDetailViewState extends State<MovieDetailView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      review.userName,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      _formatDate(review.createdAt),
-                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                    ),
+                    Text(review.userName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    Text(_formatDate(review.createdAt), style: TextStyle(color: Colors.grey[500], fontSize: 12)),
                   ],
                 ),
               ),
-              // Stjärnor
               Row(
                 children: List.generate(5, (index) {
                   return Icon(
@@ -386,10 +356,7 @@ class _MovieDetailViewState extends State<MovieDetailView> {
           ),
           if (review.comment.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Text(
-              review.comment,
-              style: TextStyle(color: Colors.grey[300], height: 1.4),
-            ),
+            Text(review.comment, style: TextStyle(color: Colors.grey[300], height: 1.4)),
           ],
         ],
       ),
@@ -436,11 +403,7 @@ class _MovieDetailViewState extends State<MovieDetailView> {
                   // Title
                   Text(
                     existingReview != null ? 'Edit Review' : 'Write Review',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -450,10 +413,7 @@ class _MovieDetailViewState extends State<MovieDetailView> {
                   const SizedBox(height: 24),
 
                   // Star rating
-                  const Text(
-                    'Your Rating',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
+                  const Text('Your Rating', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -478,17 +438,16 @@ class _MovieDetailViewState extends State<MovieDetailView> {
                   const SizedBox(height: 24),
 
                   // Comment
-                  const Text(
-                    'Your Review (optional)',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
+                  const Text('Your Review (optional)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
                   TextField(
                     controller: commentController,
                     maxLines: 4,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'Share your thoughts about this movie...',
+                      hintText: isTV 
+                          ? 'Share your thoughts about this show...'
+                          : 'Share your thoughts about this movie...',
                       hintStyle: TextStyle(color: Colors.grey[600]),
                       filled: true,
                       fillColor: Colors.black.withOpacity(0.3),
@@ -518,11 +477,7 @@ class _MovieDetailViewState extends State<MovieDetailView> {
                       ),
                       child: Text(
                         existingReview != null ? 'Update Review' : 'Submit Review',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                     ),
                   ),
@@ -542,14 +497,15 @@ class _MovieDetailViewState extends State<MovieDetailView> {
 
     if (currentUser == null) return;
 
-    final reviewId = existingId ?? '${currentUser.id}_${widget.movie.id}';
+    final reviewId = existingId ?? '${currentUser.id}_${widget.movie.uniqueId}';
 
     final review = Review(
       id: reviewId,
       userId: currentUser.id,
       userName: currentUser.name,
-      movieId: widget.movie.id,
-      movieTitle: widget.movie.title,
+      itemId: widget.movie.uniqueId,
+      itemTitle: widget.movie.title,
+      itemType: widget.movie.mediaType,
       rating: rating,
       comment: comment,
       createdAt: DateTime.now(),

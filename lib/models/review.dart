@@ -4,9 +4,10 @@ class Review {
   final String id;
   final String userId;
   final String userName;
-  final int movieId;
-  final String movieTitle;
-  final double rating; // 1-5 stjärnor
+  final String itemId;     // movie_123 eller tv_456
+  final String itemTitle;
+  final String itemType;   // 'movie' eller 'tv'
+  final double rating;
   final String comment;
   final DateTime createdAt;
 
@@ -14,8 +15,9 @@ class Review {
     required this.id,
     required this.userId,
     required this.userName,
-    required this.movieId,
-    required this.movieTitle,
+    required this.itemId,
+    required this.itemTitle,
+    required this.itemType,
     required this.rating,
     required this.comment,
     required this.createdAt,
@@ -35,8 +37,9 @@ class Review {
       id: json['id'] ?? '',
       userId: json['user_id'] ?? '',
       userName: json['user_name'] ?? '',
-      movieId: json['movie_id'] ?? 0,
-      movieTitle: json['movie_title'] ?? '',
+      itemId: json['item_id'] ?? json['movie_id']?.toString() ?? '',
+      itemTitle: json['item_title'] ?? json['movie_title'] ?? '',
+      itemType: json['item_type'] ?? 'movie',
       rating: (json['rating'] ?? 0).toDouble(),
       comment: json['comment'] ?? '',
       createdAt: createdAt,
@@ -48,8 +51,9 @@ class Review {
       'id': id,
       'user_id': userId,
       'user_name': userName,
-      'movie_id': movieId,
-      'movie_title': movieTitle,
+      'item_id': itemId,
+      'item_title': itemTitle,
+      'item_type': itemType,
       'rating': rating,
       'comment': comment,
       'created_at': Timestamp.fromDate(createdAt),

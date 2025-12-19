@@ -169,7 +169,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
           return const AuthView();
         }
 
-        // Användaren är inloggad - initiera SwipeViewModel med sparade likes
         return FutureBuilder(
           future: _initializeSwipeViewModel(context, authViewModel),
           builder: (context, snapshot) {
@@ -198,13 +197,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Future<void> _initializeSwipeViewModel(BuildContext context, AuthViewModel authViewModel) async {
     final swipeViewModel = context.read<SwipeViewModel>();
     final user = authViewModel.currentUser!;
-    
-    // Skicka användarens ID och sparade liked movie IDs
+
     await swipeViewModel.setUser(user.id, user.likedMovieIds);
-    
-    // Ladda filmer om det inte redan är gjort
-    if (swipeViewModel.movies.isEmpty) {
-      await swipeViewModel.loadMovies();
+
+    if (swipeViewModel.currentList.isEmpty) {
+      await swipeViewModel.loadItems();
     }
   }
 }

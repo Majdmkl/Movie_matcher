@@ -15,19 +15,30 @@ class FriendMatchesView extends StatefulWidget {
   State<FriendMatchesView> createState() => _FriendMatchesViewState();
 }
 
-class _FriendMatchesViewState extends State<FriendMatchesView> {
+class _FriendMatchesViewState extends State<FriendMatchesView> with SingleTickerProviderStateMixin {
   final TMDBService _tmdbService = TMDBService();
+  
   List<Movie> _friendMovies = [];
+  List<Movie> _friendTVShows = [];
   bool _isLoading = true;
   AppUser? _latestFriendData;
+  
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _loadFriendMovies();
+    _tabController = TabController(length: 2, vsync: this);
+    _loadFriendItems();
   }
 
-  Future<void> _loadFriendMovies() async {
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadFriendItems() async {
     setState(() => _isLoading = true);
 
     final authViewModel = context.read<AuthViewModel>();
@@ -36,7 +47,9 @@ class _FriendMatchesViewState extends State<FriendMatchesView> {
     final friendData = _latestFriendData ?? widget.friend;
 
     if (friendData.likedMovieIds.isNotEmpty) {
-      _friendMovies = await _tmdbService.getMoviesByIds(friendData.likedMovieIds);
+      final items = await _tmdbService.getItemsByUniqueIds(friendData.likedMovieIds);
+      _friendMovies = items.where((m) => m.mediaType == 'movie').toList();
+      _friendTVShows = items.where((m) => m.mediaType == 'tv').toList();
     }
 
     setState(() => _isLoading = false);
@@ -70,7 +83,7 @@ class _FriendMatchesViewState extends State<FriendMatchesView> {
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   Text(
-                    '${_friendMovies.length} movies',
+                    '${_friendMovies.length + _friendTVShows.length} items',
                     style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                   ),
                 ],
@@ -81,9 +94,19 @@ class _FriendMatchesViewState extends State<FriendMatchesView> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadFriendMovies,
+            onPressed: _loadFriendItems,
           ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.purple,
+          labelColor: Colors.purple,
+          unselectedLabelColor: Colors.grey,
+          tabs: [
+            Tab(text: '🎬 Movies (${_friendMovies.length})'),
+            Tab(text: '📺 TV Shows (${_friendTVShows.length})'),
+          ],
+        ),
       ),
       body: _isLoading
           ? const Center(
@@ -96,29 +119,21 @@ class _FriendMatchesViewState extends State<FriendMatchesView> {
                 ],
               ),
             )
-          : _friendMovies.isEmpty
-              ? _buildEmptyState()
-              : _buildMovieGrid(),
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _buildGrid(_friendMovies, 'movie'),
+                _buildGrid(_friendTVShows, 'tv'),
+              ],
+            ),
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.movie_outlined, size: 64, color: Colors.grey[600]),
-          const SizedBox(height: 16),
-          Text(
-            '${widget.friend.name} hasn\'t liked any movies yet',
-            style: TextStyle(color: Colors.grey[400], fontSize: 16),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildGrid(List<Movie> items, String type) {
+    if (items.isEmpty) {
+      return _buildEmptyState(type);
+    }
 
-  Widget _buildMovieGrid() {
     final currentUser = context.read<AuthViewModel>().currentUser;
     final myLikedIds = currentUser?.likedMovieIds ?? [];
 
@@ -130,25 +145,48 @@ class _FriendMatchesViewState extends State<FriendMatchesView> {
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),
-      itemCount: _friendMovies.length,
+      itemCount: items.length,
       itemBuilder: (context, index) {
-        final movie = _friendMovies[index];
-        final isCommon = myLikedIds.contains(movie.id);
-        return _buildMovieTile(movie, isCommon);
+        final item = items[index];
+        final isCommon = myLikedIds.contains(item.uniqueId);
+        return _buildItemTile(item, isCommon);
       },
     );
   }
 
-  Widget _buildMovieTile(Movie movie, bool isCommon) {
+  Widget _buildEmptyState(String type) {
+    final isMovie = type == 'movie';
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            isMovie ? Icons.movie_outlined : Icons.tv_outlined,
+            size: 64,
+            color: Colors.grey[600],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '${widget.friend.name} hasn\'t liked any ${isMovie ? 'movies' : 'TV shows'} yet',
+            style: TextStyle(color: Colors.grey[400], fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildItemTile(Movie item, bool isCommon) {
+    final isTV = item.mediaType == 'tv';
+
     return GestureDetector(
       onTap: () {
-        // Öppna filmdetaljer (utan möjlighet att skriva recension om man inte likat)
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => MovieDetailView(
-              movie: movie,
-              showWriteReview: isCommon, // Kan bara recensera om man också gillar filmen
+              movie: item,
+              showWriteReview: isCommon,
             ),
           ),
         );
@@ -171,9 +209,9 @@ class _FriendMatchesViewState extends State<FriendMatchesView> {
             fit: StackFit.expand,
             children: [
               // Poster
-              movie.posterUrl.isNotEmpty
+              item.posterUrl.isNotEmpty
                   ? Image.network(
-                      movie.posterUrl,
+                      item.posterUrl,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         return Container(
@@ -208,7 +246,7 @@ class _FriendMatchesViewState extends State<FriendMatchesView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        movie.title,
+                        item.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -223,12 +261,29 @@ class _FriendMatchesViewState extends State<FriendMatchesView> {
                           const Icon(Icons.star, size: 14, color: Colors.amber),
                           const SizedBox(width: 4),
                           Text(
-                            movie.rating.toStringAsFixed(1),
+                            item.rating.toStringAsFixed(1),
                             style: const TextStyle(color: Colors.white, fontSize: 12),
                           ),
                         ],
                       ),
                     ],
+                  ),
+                ),
+              ),
+
+              // Type badge
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isTV ? Colors.blue : Colors.purple,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    isTV ? 'TV' : 'MOVIE',
+                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -257,27 +312,6 @@ class _FriendMatchesViewState extends State<FriendMatchesView> {
                     ),
                   ),
                 ),
-
-              // Tap hint
-              Positioned(
-                top: isCommon ? 40 : 8,
-                left: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.rate_review, color: Colors.white, size: 10),
-                      SizedBox(width: 4),
-                      Text('See reviews', style: TextStyle(color: Colors.white, fontSize: 8)),
-                    ],
-                  ),
-                ),
-              ),
             ],
           ),
         ),

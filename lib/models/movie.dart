@@ -6,6 +6,7 @@ class Movie {
   final double rating;
   final int year;
   final List<String> genres;
+  final String mediaType; // 'movie' eller 'tv'
 
   Movie({
     required this.id,
@@ -15,14 +16,18 @@ class Movie {
     required this.rating,
     required this.year,
     required this.genres,
+    this.mediaType = 'movie',
   });
 
-  // För att jämföra filmer (undvika dubletter)
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is Movie && runtimeType == other.runtimeType && id == other.id;
+  // Unik ID som kombinerar mediaType och id (för att undvika konflikter)
+  String get uniqueId => '${mediaType}_$id';
 
   @override
-  int get hashCode => id.hashCode;
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is Movie && other.id == id && other.mediaType == mediaType;
+  }
+
+  @override
+  int get hashCode => id.hashCode ^ mediaType.hashCode;
 }

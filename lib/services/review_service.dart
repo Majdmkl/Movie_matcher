@@ -17,13 +17,12 @@ class ReviewService {
     }
   }
 
-  // Hämta recensioner för en film
-  Future<List<Review>> getReviewsForMovie(int movieId) async {
+  // Hämta recensioner för ett item (movie_123 eller tv_456)
+  Future<List<Review>> getReviewsForItem(String itemId) async {
     try {
       final query = await _firestore
           .collection(_collection)
-          .where('movie_id', isEqualTo: movieId)
-          .orderBy('created_at', descending: true)
+          .where('item_id', isEqualTo: itemId)
           .get();
 
       return query.docs.map((doc) => Review.fromJson(doc.data())).toList();
@@ -40,20 +39,16 @@ class ReviewService {
     try {
       final List<Review> reviews = [];
 
-      // Firestore har begränsning på 10 items i whereIn
       for (int i = 0; i < userIds.length; i += 10) {
         final batch = userIds.skip(i).take(10).toList();
         final query = await _firestore
             .collection(_collection)
             .where('user_id', whereIn: batch)
-            .orderBy('created_at', descending: true)
-            .limit(50)
             .get();
 
         reviews.addAll(query.docs.map((doc) => Review.fromJson(doc.data())));
       }
 
-      // Sortera efter datum
       reviews.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return reviews;
     } catch (e) {
@@ -62,13 +57,13 @@ class ReviewService {
     }
   }
 
-  // Hämta användarens recension för en specifik film
-  Future<Review?> getUserReviewForMovie(String userId, int movieId) async {
+  // Hämta användarens recension för ett specifikt item
+  Future<Review?> getUserReviewForItem(String userId, String itemId) async {
     try {
       final query = await _firestore
           .collection(_collection)
           .where('user_id', isEqualTo: userId)
-          .where('movie_id', isEqualTo: movieId)
+          .where('item_id', isEqualTo: itemId)
           .limit(1)
           .get();
 
@@ -100,10 +95,11 @@ class ReviewService {
       final query = await _firestore
           .collection(_collection)
           .where('user_id', isEqualTo: userId)
-          .orderBy('created_at', descending: true)
           .get();
 
-      return query.docs.map((doc) => Review.fromJson(doc.data())).toList();
+      final reviews = query.docs.map((doc) => Review.fromJson(doc.data())).toList();
+      reviews.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return reviews;
     } catch (e) {
       print('❌ Error getting user reviews: $e');
       return [];

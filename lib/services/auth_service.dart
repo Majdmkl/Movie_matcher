@@ -11,7 +11,6 @@ class AuthService {
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
-  // Registrera ny användare
   Future<AppUser?> register({
     required String email,
     required String password,
@@ -34,7 +33,6 @@ class AuthService {
         createdAt: DateTime.now(),
       );
 
-      // Spara till Firestore - vänta inte för länge
       _saveUserToFirestore(appUser);
 
       print('✅ User registered: ${appUser.email}');
@@ -48,7 +46,6 @@ class AuthService {
     }
   }
 
-  // Spara användare till Firestore (async, ingen väntan)
   Future<void> _saveUserToFirestore(AppUser user) async {
     try {
       await _firestore
@@ -61,7 +58,6 @@ class AuthService {
     }
   }
 
-  // Logga in
   Future<AppUser?> login({
     required String email,
     required String password,
@@ -103,14 +99,10 @@ class AuthService {
     print('✅ User logged out');
   }
 
-  // Hämta användare från Firestore
   Future<AppUser?> getUser(String userId) async {
     try {
-      final doc = await _firestore
-          .collection(_collection)
-          .doc(userId)
-          .get();
-      
+      final doc = await _firestore.collection(_collection).doc(userId).get();
+
       if (doc.exists && doc.data() != null) {
         return AppUser.fromJson(doc.data()!);
       }
@@ -121,29 +113,28 @@ class AuthService {
     }
   }
 
-  // Lägg till liked movie - FIRE AND FORGET (ingen timeout)
-  void addLikedMovie(String userId, int movieId) {
+  // Lägg till liked item (movie_123 eller tv_456)
+  void addLikedItem(String userId, String uniqueId) {
     _firestore.collection(_collection).doc(userId).update({
-      'liked_movie_ids': FieldValue.arrayUnion([movieId]),
+      'liked_movie_ids': FieldValue.arrayUnion([uniqueId]),
     }).then((_) {
-      print('✅ Saved like to Firebase: $movieId');
+      print('✅ Saved like to Firebase: $uniqueId');
     }).catchError((e) {
       print('⚠️ Could not save like to Firebase: $e');
     });
   }
 
-  // Ta bort liked movie
-  void removeLikedMovie(String userId, int movieId) {
+  // Ta bort liked item
+  void removeLikedItem(String userId, String uniqueId) {
     _firestore.collection(_collection).doc(userId).update({
-      'liked_movie_ids': FieldValue.arrayRemove([movieId]),
+      'liked_movie_ids': FieldValue.arrayRemove([uniqueId]),
     }).then((_) {
-      print('✅ Removed like from Firebase: $movieId');
+      print('✅ Removed like from Firebase: $uniqueId');
     }).catchError((e) {
       print('⚠️ Could not remove like from Firebase: $e');
     });
   }
 
-  // Uppdatera namn
   void updateName(String userId, String newName) {
     _firestore.collection(_collection).doc(userId).update({
       'name': newName,
@@ -154,9 +145,8 @@ class AuthService {
     });
   }
 
-  // === FRIENDS FUNKTIONER ===
+  // === FRIENDS ===
 
-  // Sök användare via email
   Future<AppUser?> searchUserByEmail(String email) async {
     try {
       final query = await _firestore
@@ -175,14 +165,12 @@ class AuthService {
     }
   }
 
-  // Lägg till vän
   Future<bool> addFriend(String userId, String friendId) async {
     try {
-      // Lägg till i båda riktningar
       await _firestore.collection(_collection).doc(userId).update({
         'friend_ids': FieldValue.arrayUnion([friendId]),
       });
-      
+
       await _firestore.collection(_collection).doc(friendId).update({
         'friend_ids': FieldValue.arrayUnion([userId]),
       });
@@ -195,13 +183,12 @@ class AuthService {
     }
   }
 
-  // Ta bort vän
   Future<bool> removeFriend(String userId, String friendId) async {
     try {
       await _firestore.collection(_collection).doc(userId).update({
         'friend_ids': FieldValue.arrayRemove([friendId]),
       });
-      
+
       await _firestore.collection(_collection).doc(friendId).update({
         'friend_ids': FieldValue.arrayRemove([userId]),
       });
@@ -214,14 +201,12 @@ class AuthService {
     }
   }
 
-  // Hämta vänner
   Future<List<AppUser>> getFriends(List<String> friendIds) async {
     if (friendIds.isEmpty) return [];
 
     try {
       final List<AppUser> friends = [];
-      
-      // Hämta i batches om 10 (Firestore begränsning)
+
       for (int i = 0; i < friendIds.length; i += 10) {
         final batch = friendIds.skip(i).take(10).toList();
         final query = await _firestore

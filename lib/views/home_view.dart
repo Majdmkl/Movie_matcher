@@ -14,11 +14,10 @@ class _HomeViewState extends State<HomeView> {
   @override
   void initState() {
     super.initState();
-    // Ladda filmer när skärmen öppnas
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final viewModel = context.read<SwipeViewModel>();
-      if (viewModel.movies.isEmpty) {
-        viewModel.loadMovies();
+      if (viewModel.currentList.isEmpty) {
+        viewModel.loadItems();
       }
     });
   }
@@ -29,217 +28,229 @@ class _HomeViewState extends State<HomeView> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Row(
-          children: [
-            Icon(Icons.movie_filter, color: Colors.purple),
-            SizedBox(width: 8),
-            Text(
-              'Movie Matcher',
-              style: TextStyle(fontWeight: FontWeight.bold),
+        title: const Text('Movie Matcher', style: TextStyle(fontWeight: FontWeight.bold)),
+        centerTitle: true,
+      ),
+      body: Column(
+        children: [
+          // Media Type Tabs
+          _buildMediaTypeTabs(),
+
+          // Swipe Area
+          Expanded(
+            child: Consumer<SwipeViewModel>(
+              builder: (context, viewModel, child) {
+                if (viewModel.isLoading && viewModel.currentList.isEmpty) {
+                  return _buildLoadingState(viewModel.currentMediaType);
+                }
+
+                if (viewModel.error != null && viewModel.currentList.isEmpty) {
+                  return _buildErrorState(viewModel);
+                }
+
+                if (!viewModel.hasItems) {
+                  return _buildEmptyState(viewModel);
+                }
+
+                return _buildSwipeArea(viewModel);
+              },
             ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              context.read<SwipeViewModel>().reset();
-              context.read<SwipeViewModel>().loadMovies();
-            },
           ),
         ],
-      ),
-      body: Consumer<SwipeViewModel>(
-        builder: (context, viewModel, child) {
-          // Loading state
-          if (viewModel.isLoading && viewModel.movies.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: Colors.purple),
-                  SizedBox(height: 16),
-                  Text(
-                    'Loading movies...',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          // Error state
-          if (viewModel.error != null && viewModel.movies.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                    const SizedBox(height: 16),
-                    Text(
-                      viewModel.error!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        viewModel.clearError();
-                        viewModel.loadMovies();
-                      },
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Try Again'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.purple,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          // Empty state (alla filmer swipade)
-          if (!viewModel.hasMovies && !viewModel.isLoading) {
-            return _buildEmptyState(context, viewModel);
-          }
-
-          // Main content
-          return Column(
-            children: [
-              // Movie Card
-              Expanded(
-                child: Stack(
-                  children: [
-                    GestureDetector(
-                      onHorizontalDragEnd: (details) {
-                        if (details.primaryVelocity! > 0) {
-                          viewModel.swipeRight();
-                        } else if (details.primaryVelocity! < 0) {
-                          viewModel.swipeLeft();
-                        }
-                      },
-                      child: viewModel.currentMovie != null
-                          ? MovieCard(movie: viewModel.currentMovie!)
-                          : const SizedBox(),
-                    ),
-                    
-                    // Loading indicator när fler laddas
-                    if (viewModel.isLoading)
-                      Positioned(
-                        top: 16,
-                        right: 16,
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.7),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.purple,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-
-              // Action Buttons
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildActionButton(
-                      icon: Icons.close,
-                      color: Colors.red,
-                      onPressed: () => viewModel.swipeLeft(),
-                    ),
-                    const SizedBox(width: 32),
-                    _buildActionButton(
-                      icon: Icons.favorite,
-                      color: Colors.green,
-                      onPressed: () => viewModel.swipeRight(),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
       ),
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, SwipeViewModel viewModel) {
+  Widget _buildMediaTypeTabs() {
+    return Consumer<SwipeViewModel>(
+      builder: (context, viewModel, child) {
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildTabButton(
+                  label: '🎬 Movies',
+                  isSelected: viewModel.currentMediaType == MediaType.movies,
+                  onTap: () => viewModel.setMediaType(MediaType.movies),
+                ),
+              ),
+              Expanded(
+                child: _buildTabButton(
+                  label: '📺 TV Shows',
+                  isSelected: viewModel.currentMediaType == MediaType.tvShows,
+                  onTap: () => viewModel.setMediaType(MediaType.tvShows),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTabButton({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.purple : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.grey,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingState(MediaType type) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.movie_filter, size: 80, color: Colors.grey[600]),
+          const CircularProgressIndicator(color: Colors.purple),
           const SizedBox(height: 16),
           Text(
-            'No more movies!',
-            style: TextStyle(
-              color: Colors.grey[400],
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'You liked ${viewModel.likedCount} movies',
-            style: TextStyle(color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {
-              viewModel.reset();
-              viewModel.loadMovies();
-            },
-            icon: const Icon(Icons.refresh),
-            label: const Text('Load More Movies'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
+            type == MediaType.movies ? 'Loading movies...' : 'Loading TV shows...',
+            style: const TextStyle(color: Colors.grey),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildErrorState(SwipeViewModel viewModel) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(
+              viewModel.error ?? 'Something went wrong',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                viewModel.clearError();
+                viewModel.loadItems(reset: true);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
+              child: const Text('Try Again', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(SwipeViewModel viewModel) {
+    final isMovies = viewModel.currentMediaType == MediaType.movies;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isMovies ? Icons.movie_outlined : Icons.tv_outlined,
+              size: 64,
+              color: Colors.grey[600],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isMovies ? 'No more movies!' : 'No more TV shows!',
+              style: TextStyle(color: Colors.grey[400], fontSize: 18),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () => viewModel.loadItems(reset: true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
+              child: const Text('Load More', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSwipeArea(SwipeViewModel viewModel) {
+    return Column(
+      children: [
+        // Movie Card
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: MovieCard(movie: viewModel.currentItem!),
+          ),
+        ),
+
+        // Action Buttons
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              // Dislike Button
+              _buildActionButton(
+                icon: Icons.close,
+                color: Colors.red,
+                onTap: () => viewModel.swipeLeft(),
+              ),
+
+              // Like Button
+              _buildActionButton(
+                icon: Icons.favorite,
+                color: Colors.green,
+                size: 72,
+                onTap: () => viewModel.swipeRight(),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildActionButton({
     required IconData icon,
     required Color color,
-    required VoidCallback onPressed,
+    required VoidCallback onTap,
+    double size = 60,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          shape: const CircleBorder(),
-          padding: const EdgeInsets.all(20),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color.withOpacity(0.15),
+          border: Border.all(color: color, width: 3),
         ),
-        child: Icon(icon, size: 30, color: Colors.white),
+        child: Icon(icon, color: color, size: size * 0.5),
       ),
     );
   }

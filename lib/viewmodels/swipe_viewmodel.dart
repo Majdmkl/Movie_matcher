@@ -4,161 +4,222 @@ import '../models/movie.dart';
 import '../services/tmdb_service.dart';
 import '../services/auth_service.dart';
 
+enum MediaType { movies, tvShows }
+
 class SwipeViewModel extends ChangeNotifier {
   final TMDBService _tmdbService = TMDBService();
   final AuthService _authService = AuthService();
+  final Random _random = Random();
 
+  // Separata listor för filmer och serier
   List<Movie> _movies = [];
-  int _currentIndex = 0;
+  List<Movie> _tvShows = [];
+
+  int _movieIndex = 0;
+  int _tvIndex = 0;
+
   List<Movie> _likedMovies = [];
-  final Set<int> _seenMovieIds = {};
-  final Set<int> _likedMovieIds = {};
+  List<Movie> _likedTVShows = [];
+
+  final Set<String> _seenIds = {};
+  final Set<String> _likedIds = {};
 
   bool _isLoading = false;
-  bool _isLoadingLikedMovies = false;
+  bool _isLoadingLiked = false;
   String? _error;
-  int _currentPage = 1;
-  bool _hasMorePages = true;
 
   String? _currentUserId;
+  MediaType _currentMediaType = MediaType.movies;
 
   // Getters
-  List<Movie> get movies => _movies;
-  Movie? get currentMovie => _currentIndex < _movies.length ? _movies[_currentIndex] : null;
+  MediaType get currentMediaType => _currentMediaType;
+  
+  List<Movie> get currentList => _currentMediaType == MediaType.movies ? _movies : _tvShows;
+  int get currentIndex => _currentMediaType == MediaType.movies ? _movieIndex : _tvIndex;
+  
+  Movie? get currentItem => currentIndex < currentList.length ? currentList[currentIndex] : null;
+  
   List<Movie> get likedMovies => _likedMovies;
-  int get likedCount => _likedMovies.length;
-  bool get hasMovies => _currentIndex < _movies.length;
+  List<Movie> get likedTVShows => _likedTVShows;
+  
+  int get likedMoviesCount => _likedMovies.length;
+  int get likedTVShowsCount => _likedTVShows.length;
+  int get totalLikedCount => _likedMovies.length + _likedTVShows.length;
+
+  bool get hasItems => currentIndex < currentList.length;
   bool get isLoading => _isLoading;
-  bool get isLoadingLikedMovies => _isLoadingLikedMovies;
+  bool get isLoadingLiked => _isLoadingLiked;
   String? get error => _error;
 
-  // Sätt användare och ladda sparade likes
-  Future<void> setUser(String userId, List<int> savedLikedMovieIds) async {
-    _currentUserId = userId;
-    _likedMovieIds.addAll(savedLikedMovieIds);
-    
-    if (savedLikedMovieIds.isNotEmpty) {
-      await _loadLikedMoviesFromIds(savedLikedMovieIds);
+  // Byt mellan filmer och serier
+  void setMediaType(MediaType type) {
+    if (_currentMediaType != type) {
+      _currentMediaType = type;
+      notifyListeners();
+
+      // Ladda om det behövs
+      if (currentList.isEmpty && !_isLoading) {
+        loadItems();
+      }
     }
   }
 
-  Future<void> _loadLikedMoviesFromIds(List<int> movieIds) async {
-    _isLoadingLikedMovies = true;
+  // Sätt användare och ladda sparade likes
+  Future<void> setUser(String userId, List<String> savedLikedIds) async {
+    _currentUserId = userId;
+    _likedIds.addAll(savedLikedIds);
+
+    if (savedLikedIds.isNotEmpty) {
+      await _loadLikedItems(savedLikedIds);
+    }
+  }
+
+  Future<void> _loadLikedItems(List<String> uniqueIds) async {
+    _isLoadingLiked = true;
     notifyListeners();
 
     try {
-      final movies = await _tmdbService.getMoviesByIds(movieIds);
-      _likedMovies = movies;
-      print('✅ Loaded ${movies.length} liked movies from Firebase');
+      final items = await _tmdbService.getItemsByUniqueIds(uniqueIds);
+
+      _likedMovies = items.where((m) => m.mediaType == 'movie').toList();
+      _likedTVShows = items.where((m) => m.mediaType == 'tv').toList();
+
+      print('✅ Loaded ${_likedMovies.length} movies and ${_likedTVShows.length} TV shows');
     } catch (e) {
-      print('❌ Error loading liked movies: $e');
+      print('❌ Error loading liked items: $e');
     }
 
-    _isLoadingLikedMovies = false;
+    _isLoadingLiked = false;
     notifyListeners();
   }
 
-  Future<void> loadMovies({bool reset = false}) async {
+  // Ladda items
+  Future<void> loadItems({bool reset = false}) async {
     if (_isLoading) return;
 
     if (reset) {
-      _currentPage = 1;
-      _movies.clear();
-      _currentIndex = 0;
-      _hasMorePages = true;
-      _seenMovieIds.clear();
+      if (_currentMediaType == MediaType.movies) {
+        _movies.clear();
+        _movieIndex = 0;
+      } else {
+        _tvShows.clear();
+        _tvIndex = 0;
+      }
     }
-
-    if (!_hasMorePages) return;
 
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final newMovies = await _tmdbService.getPopularMovies(page: _currentPage);
+      List<Movie> newItems;
 
-      final filteredMovies = newMovies.where((movie) {
-        return !_seenMovieIds.contains(movie.id) && 
-               !_likedMovieIds.contains(movie.id) &&
-               movie.posterUrl.isNotEmpty;
-      }).toList();
-
-      for (var movie in filteredMovies) {
-        _seenMovieIds.add(movie.id);
+      if (_currentMediaType == MediaType.movies) {
+        newItems = await _tmdbService.getPopularMovies();
+      } else {
+        newItems = await _tmdbService.getPopularTVShows();
       }
 
-      // SHUFFLE!
-      filteredMovies.shuffle(Random());
+      // Filtrera bort sedda och redan likade
+      final filteredItems = newItems.where((item) {
+        return !_seenIds.contains(item.uniqueId) &&
+            !_likedIds.contains(item.uniqueId) &&
+            item.posterUrl.isNotEmpty;
+      }).toList();
 
-      _movies.addAll(filteredMovies);
-      _currentPage++;
+      for (var item in filteredItems) {
+        _seenIds.add(item.uniqueId);
+      }
 
-      if (newMovies.isEmpty) {
-        _hasMorePages = false;
+      // Extra shuffle
+      filteredItems.shuffle(_random);
+
+      if (_currentMediaType == MediaType.movies) {
+        _movies.addAll(filteredItems);
+      } else {
+        _tvShows.addAll(filteredItems);
       }
 
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      _error = 'Could not load movies. Check your internet connection.';
+      _error = 'Could not load content. Check your internet connection.';
       _isLoading = false;
       notifyListeners();
     }
   }
 
+  // Swipe höger (gilla)
   Future<void> swipeRight() async {
-    if (currentMovie == null) return;
+    if (currentItem == null) return;
 
-    final movie = currentMovie!;
+    final item = currentItem!;
 
-    if (!_likedMovieIds.contains(movie.id)) {
-      _likedMovieIds.add(movie.id);
-      _likedMovies.add(movie);
+    if (!_likedIds.contains(item.uniqueId)) {
+      _likedIds.add(item.uniqueId);
+
+      if (item.mediaType == 'movie') {
+        _likedMovies.add(item);
+      } else {
+        _likedTVShows.add(item);
+      }
 
       if (_currentUserId != null) {
-        _authService.addLikedMovie(_currentUserId!, movie.id);
+        _authService.addLikedItem(_currentUserId!, item.uniqueId);
       }
     }
 
     _moveToNext();
   }
 
+  // Swipe vänster (ogilla)
   void swipeLeft() {
-    if (currentMovie == null) return;
+    if (currentItem == null) return;
     _moveToNext();
   }
 
   void _moveToNext() {
-    _currentIndex++;
+    if (_currentMediaType == MediaType.movies) {
+      _movieIndex++;
+    } else {
+      _tvIndex++;
+    }
     notifyListeners();
 
-    if (_currentIndex >= _movies.length - 3 && !_isLoading && _hasMorePages) {
-      loadMovies();
+    // Ladda fler om vi närmar oss slutet
+    if (currentIndex >= currentList.length - 5 && !_isLoading) {
+      loadItems();
     }
   }
 
-  Future<void> removeLikedMovie(int movieId) async {
-    _likedMovies.removeWhere((m) => m.id == movieId);
-    _likedMovieIds.remove(movieId);
-    
-    if (_currentUserId != null) {
-      _authService.removeLikedMovie(_currentUserId!, movieId);
+  // Ta bort liked
+  Future<void> removeLikedItem(Movie item) async {
+    if (item.mediaType == 'movie') {
+      _likedMovies.removeWhere((m) => m.uniqueId == item.uniqueId);
+    } else {
+      _likedTVShows.removeWhere((m) => m.uniqueId == item.uniqueId);
     }
-    
+    _likedIds.remove(item.uniqueId);
+
+    if (_currentUserId != null) {
+      _authService.removeLikedItem(_currentUserId!, item.uniqueId);
+    }
+
     notifyListeners();
   }
 
   void reset() {
-    _currentIndex = 0;
+    _movieIndex = 0;
+    _tvIndex = 0;
     _movies.clear();
-    _seenMovieIds.clear();
-    _currentPage = 1;
-    _hasMorePages = true;
-    _error = null;
+    _tvShows.clear();
+    _seenIds.clear();
     _likedMovies.clear();
-    _likedMovieIds.clear();
+    _likedTVShows.clear();
+    _likedIds.clear();
     _currentUserId = null;
+    _error = null;
+    _currentMediaType = MediaType.movies;
     notifyListeners();
   }
 
