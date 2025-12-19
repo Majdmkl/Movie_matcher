@@ -18,20 +18,15 @@ class AuthService {
     required String name,
   }) async {
     try {
-      // 1. Skapa Firebase Auth användare (med timeout)
       final credential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
-      ).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => throw Exception('Registration timeout'),
       );
 
       if (credential.user == null) {
         throw Exception('Failed to create user');
       }
 
-      // 2. Skapa AppUser objekt
       final appUser = AppUser(
         id: credential.user!.uid,
         email: email,
@@ -39,18 +34,8 @@ class AuthService {
         createdAt: DateTime.now(),
       );
 
-      // 3. Spara till Firestore (med timeout, men fortsätt även om det misslyckas)
-      try {
-        await _firestore
-            .collection(_collection)
-            .doc(appUser.id)
-            .set(appUser.toJson())
-            .timeout(const Duration(seconds: 5));
-        print('✅ User saved to Firestore');
-      } catch (e) {
-        print('⚠️ Could not save to Firestore (will retry later): $e');
-        // Fortsätt ändå - användaren är skapad i Auth
-      }
+      // Spara till Firestore - vänta inte för länge
+      _saveUserToFirestore(appUser);
 
       print('✅ User registered: ${appUser.email}');
       return appUser;
@@ -63,6 +48,19 @@ class AuthService {
     }
   }
 
+  // Spara användare till Firestore (async, ingen väntan)
+  Future<void> _saveUserToFirestore(AppUser user) async {
+    try {
+      await _firestore
+          .collection(_collection)
+          .doc(user.id)
+          .set(user.toJson(), SetOptions(merge: true));
+      print('✅ User saved to Firestore');
+    } catch (e) {
+      print('⚠️ Could not save user to Firestore: $e');
+    }
+  }
+
   // Logga in
   Future<AppUser?> login({
     required String email,
@@ -72,30 +70,21 @@ class AuthService {
       final credential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
-      ).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => throw Exception('Login timeout'),
       );
 
       if (credential.user == null) {
         throw Exception('Failed to login');
       }
 
-      // Försök hämta från Firestore med timeout
-      AppUser? appUser;
-      try {
-        appUser = await getUser(credential.user!.uid);
-      } catch (e) {
-        print('⚠️ Could not fetch user data from Firestore: $e');
-      }
+      AppUser? appUser = await getUser(credential.user!.uid);
 
-      // Om vi inte fick data från Firestore, skapa ett lokalt objekt
       if (appUser == null) {
         appUser = AppUser(
           id: credential.user!.uid,
           email: email,
-          name: email.split('@')[0], // Använd email-prefix som namn
+          name: email.split('@')[0],
         );
+        _saveUserToFirestore(appUser);
       }
 
       print('✅ User logged in: ${appUser.email}');
@@ -109,20 +98,18 @@ class AuthService {
     }
   }
 
-  // Logga ut
   Future<void> logout() async {
     await _auth.signOut();
     print('✅ User logged out');
   }
 
-  // Hämta användare från Firestore (med timeout)
+  // Hämta användare från Firestore
   Future<AppUser?> getUser(String userId) async {
     try {
       final doc = await _firestore
           .collection(_collection)
           .doc(userId)
-          .get()
-          .timeout(const Duration(seconds: 5));
+          .get();
       
       if (doc.exists && doc.data() != null) {
         return AppUser.fromJson(doc.data()!);
@@ -134,39 +121,121 @@ class AuthService {
     }
   }
 
-  // Lägg till liked movie (fire and forget - ingen väntan)
-  Future<void> addLikedMovie(String userId, int movieId) async {
-    try {
-      _firestore.collection(_collection).doc(userId).update({
-        'liked_movie_ids': FieldValue.arrayUnion([movieId]),
-      }).timeout(const Duration(seconds: 3)).catchError((e) {
-        print('⚠️ Could not save like: $e');
-      });
-      print('✅ Added liked movie: $movieId');
-    } catch (e) {
-      print('⚠️ Error adding liked movie: $e');
-    }
+  // Lägg till liked movie - FIRE AND FORGET (ingen timeout)
+  void addLikedMovie(String userId, int movieId) {
+    _firestore.collection(_collection).doc(userId).update({
+      'liked_movie_ids': FieldValue.arrayUnion([movieId]),
+    }).then((_) {
+      print('✅ Saved like to Firebase: $movieId');
+    }).catchError((e) {
+      print('⚠️ Could not save like to Firebase: $e');
+    });
   }
 
   // Ta bort liked movie
-  Future<void> removeLikedMovie(String userId, int movieId) async {
-    try {
-      await _firestore.collection(_collection).doc(userId).update({
-        'liked_movie_ids': FieldValue.arrayRemove([movieId]),
-      }).timeout(const Duration(seconds: 3));
-    } catch (e) {
-      print('⚠️ Error removing liked movie: $e');
-    }
+  void removeLikedMovie(String userId, int movieId) {
+    _firestore.collection(_collection).doc(userId).update({
+      'liked_movie_ids': FieldValue.arrayRemove([movieId]),
+    }).then((_) {
+      print('✅ Removed like from Firebase: $movieId');
+    }).catchError((e) {
+      print('⚠️ Could not remove like from Firebase: $e');
+    });
   }
 
   // Uppdatera namn
-  Future<void> updateName(String userId, String newName) async {
+  void updateName(String userId, String newName) {
+    _firestore.collection(_collection).doc(userId).update({
+      'name': newName,
+    }).then((_) {
+      print('✅ Updated name in Firebase');
+    }).catchError((e) {
+      print('⚠️ Could not update name in Firebase: $e');
+    });
+  }
+
+  // === FRIENDS FUNKTIONER ===
+
+  // Sök användare via email
+  Future<AppUser?> searchUserByEmail(String email) async {
+    try {
+      final query = await _firestore
+          .collection(_collection)
+          .where('email', isEqualTo: email.toLowerCase().trim())
+          .limit(1)
+          .get();
+
+      if (query.docs.isNotEmpty) {
+        return AppUser.fromJson(query.docs.first.data());
+      }
+      return null;
+    } catch (e) {
+      print('❌ Error searching user: $e');
+      return null;
+    }
+  }
+
+  // Lägg till vän
+  Future<bool> addFriend(String userId, String friendId) async {
+    try {
+      // Lägg till i båda riktningar
+      await _firestore.collection(_collection).doc(userId).update({
+        'friend_ids': FieldValue.arrayUnion([friendId]),
+      });
+      
+      await _firestore.collection(_collection).doc(friendId).update({
+        'friend_ids': FieldValue.arrayUnion([userId]),
+      });
+
+      print('✅ Added friend: $friendId');
+      return true;
+    } catch (e) {
+      print('❌ Error adding friend: $e');
+      return false;
+    }
+  }
+
+  // Ta bort vän
+  Future<bool> removeFriend(String userId, String friendId) async {
     try {
       await _firestore.collection(_collection).doc(userId).update({
-        'name': newName,
-      }).timeout(const Duration(seconds: 3));
+        'friend_ids': FieldValue.arrayRemove([friendId]),
+      });
+      
+      await _firestore.collection(_collection).doc(friendId).update({
+        'friend_ids': FieldValue.arrayRemove([userId]),
+      });
+
+      print('✅ Removed friend: $friendId');
+      return true;
     } catch (e) {
-      print('⚠️ Error updating name: $e');
+      print('❌ Error removing friend: $e');
+      return false;
+    }
+  }
+
+  // Hämta vänner
+  Future<List<AppUser>> getFriends(List<String> friendIds) async {
+    if (friendIds.isEmpty) return [];
+
+    try {
+      final List<AppUser> friends = [];
+      
+      // Hämta i batches om 10 (Firestore begränsning)
+      for (int i = 0; i < friendIds.length; i += 10) {
+        final batch = friendIds.skip(i).take(10).toList();
+        final query = await _firestore
+            .collection(_collection)
+            .where(FieldPath.documentId, whereIn: batch)
+            .get();
+
+        friends.addAll(query.docs.map((doc) => AppUser.fromJson(doc.data())));
+      }
+
+      return friends;
+    } catch (e) {
+      print('❌ Error getting friends: $e');
+      return [];
     }
   }
 

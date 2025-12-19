@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/movie.dart';
 import '../services/tmdb_service.dart';
@@ -9,11 +10,12 @@ class SwipeViewModel extends ChangeNotifier {
 
   List<Movie> _movies = [];
   int _currentIndex = 0;
-  final List<Movie> _likedMovies = [];
+  List<Movie> _likedMovies = [];
   final Set<int> _seenMovieIds = {};
-  final Set<int> _likedMovieIds = {}; // För att undvika dubletter
+  final Set<int> _likedMovieIds = {};
 
   bool _isLoading = false;
+  bool _isLoadingLikedMovies = false;
   String? _error;
   int _currentPage = 1;
   bool _hasMorePages = true;
@@ -27,10 +29,33 @@ class SwipeViewModel extends ChangeNotifier {
   int get likedCount => _likedMovies.length;
   bool get hasMovies => _currentIndex < _movies.length;
   bool get isLoading => _isLoading;
+  bool get isLoadingLikedMovies => _isLoadingLikedMovies;
   String? get error => _error;
 
-  void setUser(String userId) {
+  // Sätt användare och ladda sparade likes
+  Future<void> setUser(String userId, List<int> savedLikedMovieIds) async {
     _currentUserId = userId;
+    _likedMovieIds.addAll(savedLikedMovieIds);
+    
+    if (savedLikedMovieIds.isNotEmpty) {
+      await _loadLikedMoviesFromIds(savedLikedMovieIds);
+    }
+  }
+
+  Future<void> _loadLikedMoviesFromIds(List<int> movieIds) async {
+    _isLoadingLikedMovies = true;
+    notifyListeners();
+
+    try {
+      final movies = await _tmdbService.getMoviesByIds(movieIds);
+      _likedMovies = movies;
+      print('✅ Loaded ${movies.length} liked movies from Firebase');
+    } catch (e) {
+      print('❌ Error loading liked movies: $e');
+    }
+
+    _isLoadingLikedMovies = false;
+    notifyListeners();
   }
 
   Future<void> loadMovies({bool reset = false}) async {
@@ -42,8 +67,6 @@ class SwipeViewModel extends ChangeNotifier {
       _currentIndex = 0;
       _hasMorePages = true;
       _seenMovieIds.clear();
-      _likedMovies.clear();
-      _likedMovieIds.clear();
     }
 
     if (!_hasMorePages) return;
@@ -56,12 +79,17 @@ class SwipeViewModel extends ChangeNotifier {
       final newMovies = await _tmdbService.getPopularMovies(page: _currentPage);
 
       final filteredMovies = newMovies.where((movie) {
-        return !_seenMovieIds.contains(movie.id) && movie.posterUrl.isNotEmpty;
+        return !_seenMovieIds.contains(movie.id) && 
+               !_likedMovieIds.contains(movie.id) &&
+               movie.posterUrl.isNotEmpty;
       }).toList();
 
       for (var movie in filteredMovies) {
         _seenMovieIds.add(movie.id);
       }
+
+      // SHUFFLE!
+      filteredMovies.shuffle(Random());
 
       _movies.addAll(filteredMovies);
       _currentPage++;
@@ -79,28 +107,23 @@ class SwipeViewModel extends ChangeNotifier {
     }
   }
 
-  // Swipe höger (gilla) - FIXAT: går alltid till nästa film
   Future<void> swipeRight() async {
     if (currentMovie == null) return;
 
     final movie = currentMovie!;
 
-    // Undvik dubletter
     if (!_likedMovieIds.contains(movie.id)) {
       _likedMovieIds.add(movie.id);
       _likedMovies.add(movie);
 
-      // Spara till Firebase
       if (_currentUserId != null) {
         _authService.addLikedMovie(_currentUserId!, movie.id);
       }
     }
 
-    // GÅ TILL NÄSTA FILM
     _moveToNext();
   }
 
-  // Swipe vänster (ogilla) - går till nästa film
   void swipeLeft() {
     if (currentMovie == null) return;
     _moveToNext();
@@ -110,21 +133,32 @@ class SwipeViewModel extends ChangeNotifier {
     _currentIndex++;
     notifyListeners();
 
-    // Ladda fler filmer om vi närmar oss slutet
     if (_currentIndex >= _movies.length - 3 && !_isLoading && _hasMorePages) {
       loadMovies();
     }
   }
 
+  Future<void> removeLikedMovie(int movieId) async {
+    _likedMovies.removeWhere((m) => m.id == movieId);
+    _likedMovieIds.remove(movieId);
+    
+    if (_currentUserId != null) {
+      _authService.removeLikedMovie(_currentUserId!, movieId);
+    }
+    
+    notifyListeners();
+  }
+
   void reset() {
     _currentIndex = 0;
-    _likedMovies.clear();
-    _likedMovieIds.clear();
     _movies.clear();
     _seenMovieIds.clear();
     _currentPage = 1;
     _hasMorePages = true;
     _error = null;
+    _likedMovies.clear();
+    _likedMovieIds.clear();
+    _currentUserId = null;
     notifyListeners();
   }
 

@@ -5,6 +5,7 @@ class AppUser {
   final String email;
   final String name;
   final List<int> likedMovieIds;
+  final List<String> friendIds;
   final DateTime createdAt;
 
   AppUser({
@@ -12,8 +13,10 @@ class AppUser {
     required this.email,
     required this.name,
     List<int>? likedMovieIds,
+    List<String>? friendIds,
     DateTime? createdAt,
   })  : likedMovieIds = likedMovieIds ?? [],
+        friendIds = friendIds ?? [],
         createdAt = createdAt ?? DateTime.now();
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
@@ -31,6 +34,7 @@ class AppUser {
       email: json['email'] ?? '',
       name: json['name'] ?? '',
       likedMovieIds: List<int>.from(json['liked_movie_ids'] ?? []),
+      friendIds: List<String>.from(json['friend_ids'] ?? []),
       createdAt: createdAt,
     );
   }
@@ -41,6 +45,7 @@ class AppUser {
       'email': email,
       'name': name,
       'liked_movie_ids': likedMovieIds,
+      'friend_ids': friendIds,
       'created_at': Timestamp.fromDate(createdAt),
     };
   }
@@ -50,6 +55,7 @@ class AppUser {
     String? email,
     String? name,
     List<int>? likedMovieIds,
+    List<String>? friendIds,
     DateTime? createdAt,
   }) {
     return AppUser(
@@ -57,6 +63,7 @@ class AppUser {
       email: email ?? this.email,
       name: name ?? this.name,
       likedMovieIds: likedMovieIds ?? this.likedMovieIds,
+      friendIds: friendIds ?? this.friendIds,
       createdAt: createdAt ?? this.createdAt,
     );
   }

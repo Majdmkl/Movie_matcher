@@ -169,12 +169,43 @@ class _AuthWrapperState extends State<AuthWrapper> {
           return const AuthView();
         }
 
-        // Sätt user i SwipeViewModel
-        context.read<SwipeViewModel>().setUser(authViewModel.currentUser!.id);
-
-        return const MainNavigation();
+        // Användaren är inloggad - initiera SwipeViewModel med sparade likes
+        return FutureBuilder(
+          future: _initializeSwipeViewModel(context, authViewModel),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Scaffold(
+                backgroundColor: Color(0xFF0D0D0D),
+                body: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(color: Colors.purple),
+                      SizedBox(height: 16),
+                      Text('Loading your data...', style: TextStyle(color: Colors.grey)),
+                    ],
+                  ),
+                ),
+              );
+            }
+            return const MainNavigation();
+          },
+        );
       },
     );
+  }
+
+  Future<void> _initializeSwipeViewModel(BuildContext context, AuthViewModel authViewModel) async {
+    final swipeViewModel = context.read<SwipeViewModel>();
+    final user = authViewModel.currentUser!;
+    
+    // Skicka användarens ID och sparade liked movie IDs
+    await swipeViewModel.setUser(user.id, user.likedMovieIds);
+    
+    // Ladda filmer om det inte redan är gjort
+    if (swipeViewModel.movies.isEmpty) {
+      await swipeViewModel.loadMovies();
+    }
   }
 }
 

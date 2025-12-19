@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/swipe_viewmodel.dart';
+import 'friends_view.dart';
 
 class ProfileView extends StatelessWidget {
   const ProfileView({Key? key}) : super(key: key);
@@ -27,7 +28,7 @@ class ProfileView extends StatelessWidget {
         builder: (context, authViewModel, swipeViewModel, child) {
           final user = authViewModel.currentUser;
 
-          return Padding(
+          return SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
@@ -62,10 +63,7 @@ class ProfileView extends StatelessWidget {
                 // Email
                 Text(
                   user?.email ?? '',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[400],
-                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.grey[400]),
                 ),
                 const SizedBox(height: 8),
 
@@ -73,10 +71,7 @@ class ProfileView extends StatelessWidget {
                 if (user != null)
                   Text(
                     'Member since ${_formatDate(user.createdAt)}',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   ),
                 const SizedBox(height: 32),
 
@@ -85,15 +80,15 @@ class ProfileView extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _buildStatCard(
-                      'Session Likes',
+                      'Liked',
                       swipeViewModel.likedCount.toString(),
                       Icons.favorite,
                       Colors.red,
                     ),
                     _buildStatCard(
-                      'Total Saved',
-                      (user?.likedMovieIds.length ?? 0).toString(),
-                      Icons.bookmark,
+                      'Friends',
+                      (user?.friendIds.length ?? 0).toString(),
+                      Icons.people,
                       Colors.blue,
                     ),
                   ],
@@ -101,19 +96,34 @@ class ProfileView extends StatelessWidget {
 
                 const SizedBox(height: 32),
 
-                // Edit name button
-                OutlinedButton.icon(
-                  onPressed: () => _showEditNameDialog(context, authViewModel),
-                  icon: const Icon(Icons.edit),
-                  label: const Text('Edit Name'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.purple,
-                    side: const BorderSide(color: Colors.purple),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  ),
+                // Friends Button
+                _buildMenuButton(
+                  context,
+                  icon: Icons.people,
+                  label: 'Friends',
+                  subtitle: '${user?.friendIds.length ?? 0} friends',
+                  color: Colors.blue,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const FriendsView()),
+                    );
+                  },
                 ),
 
-                const Spacer(),
+                const SizedBox(height: 12),
+
+                // Edit Name Button
+                _buildMenuButton(
+                  context,
+                  icon: Icons.edit,
+                  label: 'Edit Name',
+                  subtitle: user?.name ?? '',
+                  color: Colors.purple,
+                  onTap: () => _showEditNameDialog(context, authViewModel),
+                ),
+
+                const SizedBox(height: 32),
 
                 // Success indicator
                 Container(
@@ -129,7 +139,7 @@ class ProfileView extends StatelessWidget {
                       Icon(Icons.check_circle, color: Colors.green),
                       SizedBox(width: 8),
                       Text(
-                        'Firebase Auth fungerar!',
+                        'Friends feature ready!',
                         style: TextStyle(
                           color: Colors.green,
                           fontWeight: FontWeight.bold,
@@ -138,7 +148,6 @@ class ProfileView extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
               ],
             ),
           );
@@ -149,6 +158,7 @@ class ProfileView extends StatelessWidget {
 
   Widget _buildStatCard(String label, String value, IconData icon, Color color) {
     return Container(
+      width: 140,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: const Color(0xFF1A1A1A),
@@ -171,6 +181,61 @@ class ProfileView extends StatelessWidget {
             style: TextStyle(fontSize: 12, color: Colors.grey[400]),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMenuButton(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.grey[600]),
+          ],
+        ),
       ),
     );
   }
@@ -239,8 +304,8 @@ class ProfileView extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () {
-              context.read<AuthViewModel>().logout();
               context.read<SwipeViewModel>().reset();
+              context.read<AuthViewModel>().logout();
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
