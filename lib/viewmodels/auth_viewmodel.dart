@@ -1,17 +1,16 @@
 import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user.dart';
-import '../services/user_service.dart';
-import '../services/storage_service.dart';
+import '../services/auth_service.dart';
 
 class AuthViewModel extends ChangeNotifier {
-  final UserService _userService = UserService();
-  final StorageService _storageService = StorageService();
+  final AuthService _authService = AuthService();
 
-  User? _currentUser;
+  AppUser? _currentUser;
   bool _isLoading = false;
   String? _error;
 
-  User? get currentUser => _currentUser;
+  AppUser? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isLoggedIn => _currentUser != null;
@@ -22,40 +21,11 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final userId = await _storageService.getUserId();
+      final firebaseUser = _authService.currentFirebaseUser;
       
-      if (userId != null && userId.isNotEmpty) {
-        // Försök hämta från Firebase med timeout
-        try {
-          _currentUser = await _userService.getUser(userId).timeout(
-            const Duration(seconds: 5),
-            onTimeout: () {
-              print('⚠️ Firebase timeout - using local data');
-              return null;
-            },
-          );
-          
-          // Om Firebase inte hittade användaren, skapa lokal user
-          if (_currentUser == null) {
-            final userName = await _storageService.getUserName();
-            if (userName != null) {
-              _currentUser = User(
-                id: userId,
-                name: userName,
-              );
-            }
-          }
-        } catch (e) {
-          print('⚠️ Could not fetch user from Firebase: $e');
-          // Använd lokal data som fallback
-          final userName = await _storageService.getUserName();
-          if (userName != null) {
-            _currentUser = User(
-              id: userId,
-              name: userName,
-            );
-          }
-        }
+      if (firebaseUser != null) {
+        _currentUser = await _authService.getUser(firebaseUser.uid);
+        print('✅ User restored: ${_currentUser?.email}');
       }
     } catch (e) {
       print('❌ Error initializing auth: $e');
@@ -65,46 +35,64 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  // Skapa ny användare
-  Future<bool> createUser(String name) async {
-    if (name.trim().isEmpty) {
-      _error = 'Name cannot be empty';
-      notifyListeners();
-      return false;
-    }
-
+  // Registrera ny användare
+  Future<bool> register({
+    required String email,
+    required String password,
+    required String name,
+  }) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final userId = DateTime.now().millisecondsSinceEpoch.toString();
-
-      final newUser = User(
-        id: userId,
-        name: name.trim(),
-        createdAt: DateTime.now(),
+      _currentUser = await _authService.register(
+        email: email,
+        password: password,
+        name: name,
       );
 
-      // Spara lokalt FÖRST (snabbt)
-      await _storageService.saveUserId(userId);
-      await _storageService.saveUserName(name.trim());
-
-      // Sätt användare direkt så UI uppdateras
-      _currentUser = newUser;
       _isLoading = false;
       notifyListeners();
-
-      // Spara till Firebase i bakgrunden (kan ta tid)
-      _userService.createUser(newUser).then((_) {
-        print('✅ User saved to Firebase');
-      }).catchError((e) {
-        print('⚠️ Could not save to Firebase (offline?): $e');
-      });
-
-      return true;
+      return _currentUser != null;
+    } on FirebaseAuthException catch (e) {
+      _error = _authService.getErrorMessage(e);
+      _isLoading = false;
+      notifyListeners();
+      return false;
     } catch (e) {
-      _error = 'Could not create user. Try again.';
+      _error = 'Could not create account. Try again.';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Logga in
+  Future<bool> login({
+    required String email,
+    required String password,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      _currentUser = await _authService.login(
+        email: email,
+        password: password,
+      );
+
+      _isLoading = false;
+      notifyListeners();
+      return _currentUser != null;
+    } on FirebaseAuthException catch (e) {
+      _error = _authService.getErrorMessage(e);
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'Could not login. Try again.';
       _isLoading = false;
       notifyListeners();
       return false;
@@ -113,42 +101,34 @@ class AuthViewModel extends ChangeNotifier {
 
   // Logga ut
   Future<void> logout() async {
-    await _storageService.clearAll();
+    await _authService.logout();
     _currentUser = null;
     notifyListeners();
-  }
-
-  // Uppdatera namn
-  Future<void> updateName(String newName) async {
-    if (_currentUser == null) return;
-
-    try {
-      await _storageService.saveUserName(newName);
-      _currentUser = _currentUser!.copyWith(name: newName);
-      notifyListeners();
-
-      // Uppdatera Firebase i bakgrunden
-      _userService.updateUserName(_currentUser!.id, newName).catchError((e) {
-        print('⚠️ Could not update name in Firebase: $e');
-      });
-    } catch (e) {
-      _error = 'Could not update name';
-      notifyListeners();
-    }
   }
 
   // Lägg till liked movie
   Future<void> addLikedMovie(int movieId) async {
     if (_currentUser == null) return;
 
-    final updatedLikes = List<int>.from(_currentUser!.likedMovieIds)..add(movieId);
-    _currentUser = _currentUser!.copyWith(likedMovieIds: updatedLikes);
+    // Uppdatera lokalt först
+    if (!_currentUser!.likedMovieIds.contains(movieId)) {
+      final updatedLikes = List<int>.from(_currentUser!.likedMovieIds)..add(movieId);
+      _currentUser = _currentUser!.copyWith(likedMovieIds: updatedLikes);
+      notifyListeners();
+
+      // Spara till Firebase
+      await _authService.addLikedMovie(_currentUser!.id, movieId);
+    }
+  }
+
+  // Uppdatera namn
+  Future<void> updateName(String newName) async {
+    if (_currentUser == null) return;
+
+    _currentUser = _currentUser!.copyWith(name: newName);
     notifyListeners();
 
-    // Spara till Firebase i bakgrunden
-    _userService.addLikedMovie(_currentUser!.id, movieId).catchError((e) {
-      print('⚠️ Could not save like to Firebase: $e');
-    });
+    await _authService.updateName(_currentUser!.id, newName);
   }
 
   int get likedCount => _currentUser?.likedMovieIds.length ?? 0;

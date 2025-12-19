@@ -36,8 +36,8 @@ class ProfileView extends StatelessWidget {
                   radius: 50,
                   backgroundColor: Colors.purple,
                   child: Text(
-                    user?.name.isNotEmpty == true 
-                        ? user!.name[0].toUpperCase() 
+                    user?.name.isNotEmpty == true
+                        ? user!.name[0].toUpperCase()
                         : '?',
                     style: const TextStyle(
                       fontSize: 40,
@@ -47,25 +47,35 @@ class ProfileView extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Name
                 Text(
-                  user?.name ?? 'Guest User',
+                  user?.name ?? 'Guest',
                   style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
                 ),
+                const SizedBox(height: 4),
+
+                // Email
+                Text(
+                  user?.email ?? '',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[400],
+                  ),
+                ),
                 const SizedBox(height: 8),
-                
+
                 // Member since
                 if (user != null)
                   Text(
                     'Member since ${_formatDate(user.createdAt)}',
                     style: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 14,
+                      color: Colors.grey[600],
+                      fontSize: 12,
                     ),
                   ),
                 const SizedBox(height: 32),
@@ -75,22 +85,22 @@ class ProfileView extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _buildStatCard(
-                      'Likes',
+                      'Session Likes',
                       swipeViewModel.likedCount.toString(),
                       Icons.favorite,
                       Colors.red,
                     ),
                     _buildStatCard(
-                      'Saved',
+                      'Total Saved',
                       (user?.likedMovieIds.length ?? 0).toString(),
                       Icons.bookmark,
                       Colors.blue,
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 32),
-                
+
                 // Edit name button
                 OutlinedButton.icon(
                   onPressed: () => _showEditNameDialog(context, authViewModel),
@@ -119,7 +129,7 @@ class ProfileView extends StatelessWidget {
                       Icon(Icons.check_circle, color: Colors.green),
                       SizedBox(width: 8),
                       Text(
-                        'Steg 5 fungerar!',
+                        'Firebase Auth fungerar!',
                         style: TextStyle(
                           color: Colors.green,
                           fontWeight: FontWeight.bold,
@@ -158,7 +168,7 @@ class ProfileView extends StatelessWidget {
           ),
           Text(
             label,
-            style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+            style: TextStyle(fontSize: 12, color: Colors.grey[400]),
           ),
         ],
       ),
@@ -175,7 +185,7 @@ class ProfileView extends StatelessWidget {
 
   void _showEditNameDialog(BuildContext context, AuthViewModel authViewModel) {
     final controller = TextEditingController(text: authViewModel.currentUser?.name);
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -230,6 +240,7 @@ class ProfileView extends StatelessWidget {
           ElevatedButton(
             onPressed: () {
               context.read<AuthViewModel>().logout();
+              context.read<SwipeViewModel>().reset();
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),

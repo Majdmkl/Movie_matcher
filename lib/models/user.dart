@@ -1,45 +1,60 @@
-class User {
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+class AppUser {
   final String id;
+  final String email;
   final String name;
   final List<int> likedMovieIds;
   final DateTime createdAt;
 
-  User({
+  AppUser({
     required this.id,
+    required this.email,
     required this.name,
     List<int>? likedMovieIds,
     DateTime? createdAt,
   })  : likedMovieIds = likedMovieIds ?? [],
         createdAt = createdAt ?? DateTime.now();
 
-  factory User.fromJson(Map<String, dynamic> json) {
-    return User(
+  factory AppUser.fromJson(Map<String, dynamic> json) {
+    DateTime createdAt;
+    if (json['created_at'] is Timestamp) {
+      createdAt = (json['created_at'] as Timestamp).toDate();
+    } else if (json['created_at'] is String) {
+      createdAt = DateTime.parse(json['created_at']);
+    } else {
+      createdAt = DateTime.now();
+    }
+
+    return AppUser(
       id: json['id'] ?? '',
+      email: json['email'] ?? '',
       name: json['name'] ?? '',
       likedMovieIds: List<int>.from(json['liked_movie_ids'] ?? []),
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'])
-          : DateTime.now(),
+      createdAt: createdAt,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'email': email,
       'name': name,
       'liked_movie_ids': likedMovieIds,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': Timestamp.fromDate(createdAt),
     };
   }
 
-  User copyWith({
+  AppUser copyWith({
     String? id,
+    String? email,
     String? name,
     List<int>? likedMovieIds,
     DateTime? createdAt,
   }) {
-    return User(
+    return AppUser(
       id: id ?? this.id,
+      email: email ?? this.email,
       name: name ?? this.name,
       likedMovieIds: likedMovieIds ?? this.likedMovieIds,
       createdAt: createdAt ?? this.createdAt,

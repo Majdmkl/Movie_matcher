@@ -7,7 +7,7 @@ import 'viewmodels/swipe_viewmodel.dart';
 import 'views/home_view.dart';
 import 'views/matches_view.dart';
 import 'views/profile_view.dart';
-import 'views/onboarding_view.dart';
+import 'views/auth_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,75 +33,47 @@ class _AppLoaderState extends State<AppLoader> {
 
   Future<void> _initializeFirebase() async {
     try {
-      // Timeout efter 10 sekunder
-      await Firebase.initializeApp().timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw Exception('Firebase connection timeout');
-        },
-      );
-      
+      await Firebase.initializeApp();
       if (mounted) {
-        setState(() {
-          _initialized = true;
-        });
+        setState(() => _initialized = true);
       }
     } catch (e) {
       print('❌ Firebase error: $e');
       if (mounted) {
-        setState(() {
-          _error = e.toString();
-        });
+        setState(() => _error = e.toString());
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Error state
     if (_error != null) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         home: Scaffold(
           backgroundColor: const Color(0xFF0D0D0D),
           body: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.cloud_off, size: 64, color: Colors.red),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Connection Error',
-                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _error!,
-                    style: TextStyle(color: Colors.grey[400], fontSize: 14),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        _error = null;
-                      });
-                      _initializeFirebase();
-                    },
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
-                    child: const Text('Retry', style: TextStyle(color: Colors.white)),
-                  ),
-                ],
-              ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.cloud_off, size: 64, color: Colors.red),
+                const SizedBox(height: 16),
+                const Text('Connection Error', style: TextStyle(color: Colors.white, fontSize: 20)),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() => _error = null);
+                    _initializeFirebase();
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
             ),
           ),
         ),
       );
     }
 
-    // Loading state
     if (!_initialized) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -122,8 +94,6 @@ class _AppLoaderState extends State<AppLoader> {
                 ),
                 const SizedBox(height: 24),
                 const CircularProgressIndicator(color: Colors.purple),
-                const SizedBox(height: 16),
-                Text('Connecting...', style: TextStyle(color: Colors.grey[400])),
               ],
             ),
           ),
@@ -142,7 +112,6 @@ class MovieMatcherApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // VIKTIGT: Använd INTE cascade (..) här!
         ChangeNotifierProvider(create: (_) => AuthViewModel()),
         ChangeNotifierProvider(create: (_) => SwipeViewModel()),
       ],
@@ -177,22 +146,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _checkAuth() async {
-    try {
-      // Timeout efter 5 sekunder
-      await context.read<AuthViewModel>().initialize().timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          print('⚠️ Auth check timeout - continuing as guest');
-        },
-      );
-    } catch (e) {
-      print('❌ Auth check error: $e');
-    }
-
+    await context.read<AuthViewModel>().initialize();
     if (mounted) {
-      setState(() {
-        _isChecking = false;
-      });
+      setState(() => _isChecking = false);
     }
   }
 
@@ -210,7 +166,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     return Consumer<AuthViewModel>(
       builder: (context, authViewModel, child) {
         if (!authViewModel.isLoggedIn) {
-          return const OnboardingView();
+          return const AuthView();
         }
 
         // Sätt user i SwipeViewModel

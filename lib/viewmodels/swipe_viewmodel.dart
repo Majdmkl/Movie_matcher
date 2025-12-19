@@ -1,17 +1,17 @@
 import 'package:flutter/foundation.dart';
 import '../models/movie.dart';
 import '../services/tmdb_service.dart';
-import '../services/user_service.dart';
+import '../services/auth_service.dart';
 
 class SwipeViewModel extends ChangeNotifier {
   final TMDBService _tmdbService = TMDBService();
-  final UserService _userService = UserService();
+  final AuthService _authService = AuthService();
 
   List<Movie> _movies = [];
   int _currentIndex = 0;
   final List<Movie> _likedMovies = [];
-  final List<Movie> _dislikedMovies = [];
   final Set<int> _seenMovieIds = {};
+  final Set<int> _likedMovieIds = {}; // För att undvika dubletter
 
   bool _isLoading = false;
   String? _error;
@@ -29,12 +29,10 @@ class SwipeViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  // Sätt användare
   void setUser(String userId) {
     _currentUserId = userId;
   }
 
-  // Ladda filmer från API
   Future<void> loadMovies({bool reset = false}) async {
     if (_isLoading) return;
 
@@ -45,7 +43,7 @@ class SwipeViewModel extends ChangeNotifier {
       _hasMorePages = true;
       _seenMovieIds.clear();
       _likedMovies.clear();
-      _dislikedMovies.clear();
+      _likedMovieIds.clear();
     }
 
     if (!_hasMorePages) return;
@@ -81,37 +79,38 @@ class SwipeViewModel extends ChangeNotifier {
     }
   }
 
-  // Swipe höger (gilla)
+  // Swipe höger (gilla) - FIXAT: går alltid till nästa film
   Future<void> swipeRight() async {
-    if (currentMovie != null) {
-      final movie = currentMovie!;
+    if (currentMovie == null) return;
+
+    final movie = currentMovie!;
+
+    // Undvik dubletter
+    if (!_likedMovieIds.contains(movie.id)) {
+      _likedMovieIds.add(movie.id);
       _likedMovies.add(movie);
 
-      // Spara till Firebase om användare är inloggad
+      // Spara till Firebase
       if (_currentUserId != null) {
-        try {
-          await _userService.addLikedMovie(_currentUserId!, movie.id);
-        } catch (e) {
-          print('⚠️ Could not save like to Firebase: $e');
-        }
+        _authService.addLikedMovie(_currentUserId!, movie.id);
       }
-
-      _moveToNext();
     }
+
+    // GÅ TILL NÄSTA FILM
+    _moveToNext();
   }
 
-  // Swipe vänster (ogilla)
+  // Swipe vänster (ogilla) - går till nästa film
   void swipeLeft() {
-    if (currentMovie != null) {
-      _dislikedMovies.add(currentMovie!);
-      _moveToNext();
-    }
+    if (currentMovie == null) return;
+    _moveToNext();
   }
 
   void _moveToNext() {
     _currentIndex++;
     notifyListeners();
 
+    // Ladda fler filmer om vi närmar oss slutet
     if (_currentIndex >= _movies.length - 3 && !_isLoading && _hasMorePages) {
       loadMovies();
     }
@@ -120,7 +119,7 @@ class SwipeViewModel extends ChangeNotifier {
   void reset() {
     _currentIndex = 0;
     _likedMovies.clear();
-    _dislikedMovies.clear();
+    _likedMovieIds.clear();
     _movies.clear();
     _seenMovieIds.clear();
     _currentPage = 1;
