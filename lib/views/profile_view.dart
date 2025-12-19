@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/swipe_viewmodel.dart';
 
 class ProfileView extends StatelessWidget {
@@ -17,34 +18,56 @@ class ProfileView extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              // TODO: Settings
-            },
+            icon: const Icon(Icons.logout),
+            onPressed: () => _showLogoutDialog(context),
           ),
         ],
       ),
-      body: Consumer<SwipeViewModel>(
-        builder: (context, viewModel, child) {
+      body: Consumer2<AuthViewModel, SwipeViewModel>(
+        builder: (context, authViewModel, swipeViewModel, child) {
+          final user = authViewModel.currentUser;
+
           return Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
                 // Profile Avatar
-                const CircleAvatar(
+                CircleAvatar(
                   radius: 50,
                   backgroundColor: Colors.purple,
-                  child: Icon(Icons.person, size: 50, color: Colors.white),
+                  child: Text(
+                    user?.name.isNotEmpty == true 
+                        ? user!.name[0].toUpperCase() 
+                        : '?',
+                    style: const TextStyle(
+                      fontSize: 40,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Guest User',
-                  style: TextStyle(
+                
+                // Name
+                Text(
+                  user?.name ?? 'Guest User',
+                  style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
                 ),
+                const SizedBox(height: 8),
+                
+                // Member since
+                if (user != null)
+                  Text(
+                    'Member since ${_formatDate(user.createdAt)}',
+                    style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: 14,
+                    ),
+                  ),
                 const SizedBox(height: 32),
 
                 // Stats
@@ -53,17 +76,31 @@ class ProfileView extends StatelessWidget {
                   children: [
                     _buildStatCard(
                       'Likes',
-                      viewModel.likedCount.toString(),
+                      swipeViewModel.likedCount.toString(),
                       Icons.favorite,
                       Colors.red,
                     ),
                     _buildStatCard(
-                      'Matches',
-                      '0',
-                      Icons.people,
-                      Colors.green,
+                      'Saved',
+                      (user?.likedMovieIds.length ?? 0).toString(),
+                      Icons.bookmark,
+                      Colors.blue,
                     ),
                   ],
+                ),
+                
+                const SizedBox(height: 32),
+                
+                // Edit name button
+                OutlinedButton.icon(
+                  onPressed: () => _showEditNameDialog(context, authViewModel),
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Edit Name'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.purple,
+                    side: const BorderSide(color: Colors.purple),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  ),
                 ),
 
                 const Spacer(),
@@ -82,7 +119,7 @@ class ProfileView extends StatelessWidget {
                       Icon(Icons.check_circle, color: Colors.green),
                       SizedBox(width: 8),
                       Text(
-                        'Steg 3 fungerar!',
+                        'Steg 5 fungerar!',
                         style: TextStyle(
                           color: Colors.green,
                           fontWeight: FontWeight.bold,
@@ -122,6 +159,81 @@ class ProfileView extends StatelessWidget {
           Text(
             label,
             style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${months[date.month - 1]} ${date.year}';
+  }
+
+  void _showEditNameDialog(BuildContext context, AuthViewModel authViewModel) {
+    final controller = TextEditingController(text: authViewModel.currentUser?.name);
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text('Edit Name', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: 'Enter your name',
+            hintStyle: TextStyle(color: Colors.grey[600]),
+            enabledBorder: const UnderlineInputBorder(
+              borderSide: BorderSide(color: Colors.purple),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                authViewModel.updateName(controller.text.trim());
+                Navigator.pop(context);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
+            child: const Text('Save', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text('Logout', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Are you sure you want to logout?',
+          style: TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              context.read<AuthViewModel>().logout();
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Logout', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

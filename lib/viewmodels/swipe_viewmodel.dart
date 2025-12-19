@@ -1,11 +1,24 @@
 import 'package:flutter/foundation.dart';
 import '../models/movie.dart';
+import '../services/tmdb_service.dart';
+import '../services/user_service.dart';
 
 class SwipeViewModel extends ChangeNotifier {
+  final TMDBService _tmdbService = TMDBService();
+  final UserService _userService = UserService();
+
   List<Movie> _movies = [];
   int _currentIndex = 0;
   final List<Movie> _likedMovies = [];
   final List<Movie> _dislikedMovies = [];
+  final Set<int> _seenMovieIds = {};
+
+  bool _isLoading = false;
+  String? _error;
+  int _currentPage = 1;
+  bool _hasMorePages = true;
+
+  String? _currentUserId;
 
   // Getters
   List<Movie> get movies => _movies;
@@ -13,20 +26,77 @@ class SwipeViewModel extends ChangeNotifier {
   List<Movie> get likedMovies => _likedMovies;
   int get likedCount => _likedMovies.length;
   bool get hasMovies => _currentIndex < _movies.length;
+  bool get isLoading => _isLoading;
+  String? get error => _error;
 
-  // Ladda filmer (dummy data för nu)
-  void loadMovies() {
-    _movies = DummyMovies.getMovies();
-    _currentIndex = 0;
+  // Sätt användare
+  void setUser(String userId) {
+    _currentUserId = userId;
+  }
+
+  // Ladda filmer från API
+  Future<void> loadMovies({bool reset = false}) async {
+    if (_isLoading) return;
+
+    if (reset) {
+      _currentPage = 1;
+      _movies.clear();
+      _currentIndex = 0;
+      _hasMorePages = true;
+      _seenMovieIds.clear();
+      _likedMovies.clear();
+      _dislikedMovies.clear();
+    }
+
+    if (!_hasMorePages) return;
+
+    _isLoading = true;
+    _error = null;
     notifyListeners();
+
+    try {
+      final newMovies = await _tmdbService.getPopularMovies(page: _currentPage);
+
+      final filteredMovies = newMovies.where((movie) {
+        return !_seenMovieIds.contains(movie.id) && movie.posterUrl.isNotEmpty;
+      }).toList();
+
+      for (var movie in filteredMovies) {
+        _seenMovieIds.add(movie.id);
+      }
+
+      _movies.addAll(filteredMovies);
+      _currentPage++;
+
+      if (newMovies.isEmpty) {
+        _hasMorePages = false;
+      }
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = 'Could not load movies. Check your internet connection.';
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   // Swipe höger (gilla)
-  void swipeRight() {
+  Future<void> swipeRight() async {
     if (currentMovie != null) {
-      _likedMovies.add(currentMovie!);
-      _currentIndex++;
-      notifyListeners();
+      final movie = currentMovie!;
+      _likedMovies.add(movie);
+
+      // Spara till Firebase om användare är inloggad
+      if (_currentUserId != null) {
+        try {
+          await _userService.addLikedMovie(_currentUserId!, movie.id);
+        } catch (e) {
+          print('⚠️ Could not save like to Firebase: $e');
+        }
+      }
+
+      _moveToNext();
     }
   }
 
@@ -34,16 +104,33 @@ class SwipeViewModel extends ChangeNotifier {
   void swipeLeft() {
     if (currentMovie != null) {
       _dislikedMovies.add(currentMovie!);
-      _currentIndex++;
-      notifyListeners();
+      _moveToNext();
     }
   }
 
-  // Återställ
+  void _moveToNext() {
+    _currentIndex++;
+    notifyListeners();
+
+    if (_currentIndex >= _movies.length - 3 && !_isLoading && _hasMorePages) {
+      loadMovies();
+    }
+  }
+
   void reset() {
     _currentIndex = 0;
     _likedMovies.clear();
     _dislikedMovies.clear();
+    _movies.clear();
+    _seenMovieIds.clear();
+    _currentPage = 1;
+    _hasMorePages = true;
+    _error = null;
+    notifyListeners();
+  }
+
+  void clearError() {
+    _error = null;
     notifyListeners();
   }
 }
