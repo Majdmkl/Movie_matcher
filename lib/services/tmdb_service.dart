@@ -24,6 +24,34 @@ class TMDBService {
     10767: 'Talk', 10768: 'War & Politics', 37: 'Western',
   };
 
+  // Provider logos - vanliga streaming-tjänster
+  static const Map<int, String> providerNames = {
+    8: 'Netflix',
+    9: 'Amazon Prime Video',
+    337: 'Disney+',
+    384: 'HBO Max',
+    15: 'Hulu',
+    531: 'Paramount+',
+    387: 'Peacock',
+    350: 'Apple TV+',
+    283: 'Crunchyroll',
+    526: 'AMC+',
+    1899: 'Max',
+    119: 'Amazon Prime Video',
+    2: 'Apple TV',
+    3: 'Google Play Movies',
+    10: 'Amazon Video',
+    192: 'YouTube',
+    188: 'YouTube Premium',
+    76: 'Viaplay',
+    118: 'HBO',
+    175: 'Netflix Kids',
+    1773: 'SkyShowtime',
+    321: 'SVT Play',
+    77: 'Comhem Play',
+    578: 'Tele2 Play',
+  };
+
   Future<List<Movie>> getPopularMovies({int page = 1}) async {
     final List<Movie> allMovies = [];
     final randomPages = _getRandomPages(3, 100);
@@ -84,6 +112,103 @@ class TMDBService {
     }
   }
 
+  // ==================== WATCH PROVIDERS ====================
+
+  Future<List<WatchProvider>> getMovieWatchProviders(int movieId, {String region = 'SE'}) async {
+    final url = Uri.parse('$_baseUrl/movie/$movieId/watch/providers?api_key=$_apiKey');
+    
+    try {
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return _parseWatchProviders(data['results'], region);
+      }
+      return [];
+    } catch (e) {
+      print('❌ Error fetching watch providers: $e');
+      return [];
+    }
+  }
+
+  Future<List<WatchProvider>> getTVWatchProviders(int tvId, {String region = 'SE'}) async {
+    final url = Uri.parse('$_baseUrl/tv/$tvId/watch/providers?api_key=$_apiKey');
+    
+    try {
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return _parseWatchProviders(data['results'], region);
+      }
+      return [];
+    } catch (e) {
+      print('❌ Error fetching TV watch providers: $e');
+      return [];
+    }
+  }
+
+  List<WatchProvider> _parseWatchProviders(Map<String, dynamic>? results, String region) {
+    if (results == null) return [];
+
+    // Försök med angiven region, annars fallback till US
+    final regionData = results[region] ?? results['US'];
+    if (regionData == null) return [];
+
+    final List<WatchProvider> providers = [];
+
+    // Flatrate = streaming (Netflix, Disney+, etc.)
+    if (regionData['flatrate'] != null) {
+      for (var provider in regionData['flatrate']) {
+        providers.add(WatchProvider(
+          id: provider['provider_id'],
+          name: provider['provider_name'],
+          logoPath: provider['logo_path'] != null 
+              ? '$_imageBaseUrl${provider['logo_path']}'
+              : '',
+          type: 'stream',
+        ));
+      }
+    }
+
+    // Rent
+    if (regionData['rent'] != null) {
+      for (var provider in regionData['rent']) {
+        // Kolla om vi redan har denna provider
+        if (!providers.any((p) => p.id == provider['provider_id'])) {
+          providers.add(WatchProvider(
+            id: provider['provider_id'],
+            name: provider['provider_name'],
+            logoPath: provider['logo_path'] != null 
+                ? '$_imageBaseUrl${provider['logo_path']}'
+                : '',
+            type: 'rent',
+          ));
+        }
+      }
+    }
+
+    // Buy
+    if (regionData['buy'] != null) {
+      for (var provider in regionData['buy']) {
+        if (!providers.any((p) => p.id == provider['provider_id'])) {
+          providers.add(WatchProvider(
+            id: provider['provider_id'],
+            name: provider['provider_name'],
+            logoPath: provider['logo_path'] != null 
+                ? '$_imageBaseUrl${provider['logo_path']}'
+                : '',
+            type: 'buy',
+          ));
+        }
+      }
+    }
+
+    return providers;
+  }
+
+  // ==================== GET BY ID ====================
+
   Future<Movie?> getMovieById(int movieId) async {
     final url = Uri.parse('$_baseUrl/movie/$movieId?api_key=$_apiKey&language=en-US');
     try {
@@ -140,6 +265,8 @@ class TMDBService {
 
     return items;
   }
+
+  // ==================== HELPERS ====================
 
   List<int> _getRandomPages(int count, int maxPage) {
     final Set<int> pages = {};
@@ -256,4 +383,19 @@ class TMDBService {
       originalLanguage: json['original_language'] ?? '',
     );
   }
+}
+
+// Watch Provider model
+class WatchProvider {
+  final int id;
+  final String name;
+  final String logoPath;
+  final String type; // 'stream', 'rent', 'buy'
+
+  WatchProvider({
+    required this.id,
+    required this.name,
+    required this.logoPath,
+    required this.type,
+  });
 }

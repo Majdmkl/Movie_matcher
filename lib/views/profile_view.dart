@@ -100,10 +100,6 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
                               _buildStatsSection(swipeViewModel, authViewModel),
                               const SizedBox(height: 24),
 
-                              // Achievement Badge
-                              _buildAchievementBadge(swipeViewModel),
-                              const SizedBox(height: 24),
-
                               // Quick Actions
                               _buildQuickActions(context, authViewModel),
                               const SizedBox(height: 24),
@@ -347,64 +343,6 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildAchievementBadge(SwipeViewModel swipeViewModel) {
-    final total = swipeViewModel.totalLikedCount;
-    final achievement = _getAchievement(total);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            achievement['color'].withOpacity(0.2),
-            achievement['color'].withOpacity(0.05),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: achievement['color'].withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: achievement['color'].withOpacity(0.2),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Text(
-              achievement['emoji'],
-              style: const TextStyle(fontSize: 28),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  achievement['title'],
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  achievement['description'],
-                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          Icon(Icons.chevron_right, color: Colors.grey[600]),
-        ],
-      ),
-    );
-  }
-
   Widget _buildQuickActions(BuildContext context, AuthViewModel authViewModel) {
     return Column(
       children: [
@@ -599,45 +537,6 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
     final prevThreshold = thresholds[level - 1];
     final nextThreshold = thresholds[level];
     return (total - prevThreshold) / (nextThreshold - prevThreshold);
-  }
-
-  Map<String, dynamic> _getAchievement(int total) {
-    if (total >= 100) {
-      return {
-        'emoji': '🏆',
-        'title': 'Movie Master',
-        'description': 'You\'ve liked over 100 titles!',
-        'color': Colors.amber,
-      };
-    } else if (total >= 50) {
-      return {
-        'emoji': '⭐',
-        'title': 'Rising Star',
-        'description': 'Keep going! 50+ titles liked.',
-        'color': Colors.purple,
-      };
-    } else if (total >= 25) {
-      return {
-        'emoji': '🎬',
-        'title': 'Film Buff',
-        'description': 'Nice collection! 25+ titles.',
-        'color': Colors.blue,
-      };
-    } else if (total >= 10) {
-      return {
-        'emoji': '🍿',
-        'title': 'Getting Started',
-        'description': 'You\'re building your watchlist!',
-        'color': Colors.green,
-      };
-    } else {
-      return {
-        'emoji': '👋',
-        'title': 'Welcome!',
-        'description': 'Start swiping to discover content.',
-        'color': Colors.grey,
-      };
-    }
   }
 
   String _formatDate(DateTime date) {
