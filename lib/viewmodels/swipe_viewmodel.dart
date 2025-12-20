@@ -11,17 +11,13 @@ class SwipeViewModel extends ChangeNotifier {
   final AuthService _authService = AuthService();
   final Random _random = Random();
 
-  // Separata listor för filmer och serier
   List<Movie> _movies = [];
   List<Movie> _tvShows = [];
-
-  int _movieIndex = 0;
-  int _tvIndex = 0;
 
   List<Movie> _likedMovies = [];
   List<Movie> _likedTVShows = [];
 
-  final Set<String> _seenIds = {};
+  final Set<String> _swipedIds = {}; // IDs vi redan swipat på
   final Set<String> _likedIds = {};
 
   bool _isLoading = false;
@@ -30,44 +26,73 @@ class SwipeViewModel extends ChangeNotifier {
 
   String? _currentUserId;
   MediaType _currentMediaType = MediaType.movies;
+  String? _selectedGenre;
 
   // Getters
   MediaType get currentMediaType => _currentMediaType;
-  
+  String? get selectedGenre => _selectedGenre;
+
   List<Movie> get currentList => _currentMediaType == MediaType.movies ? _movies : _tvShows;
-  int get currentIndex => _currentMediaType == MediaType.movies ? _movieIndex : _tvIndex;
-  
-  Movie? get currentItem => currentIndex < currentList.length ? currentList[currentIndex] : null;
-  
+
+  // Filtrerad lista - exkluderar swipade och applicerar genre-filter
+  List<Movie> get _filteredList {
+    var list = currentList.where((m) => !_swipedIds.contains(m.uniqueId)).toList();
+    
+    if (_selectedGenre != null) {
+      // Special hantering för Arabic och Turkish (språk, inte genre)
+      if (_selectedGenre == 'Arabic') {
+        list = list.where((m) => m.originalLanguage == 'ar').toList();
+      } else if (_selectedGenre == 'Turkish') {
+        list = list.where((m) => m.originalLanguage == 'tr').toList();
+      } else {
+        list = list.where((m) => m.genres.contains(_selectedGenre)).toList();
+      }
+    }
+    
+    return list;
+  }
+
+  Movie? get currentItem => _filteredList.isNotEmpty ? _filteredList.first : null;
+  Movie? get nextItem => _filteredList.length > 1 ? _filteredList[1] : null;
+
   List<Movie> get likedMovies => _likedMovies;
   List<Movie> get likedTVShows => _likedTVShows;
-  
+
   int get likedMoviesCount => _likedMovies.length;
   int get likedTVShowsCount => _likedTVShows.length;
   int get totalLikedCount => _likedMovies.length + _likedTVShows.length;
 
-  bool get hasItems => currentIndex < currentList.length;
+  bool get hasItems => currentItem != null;
   bool get isLoading => _isLoading;
   bool get isLoadingLiked => _isLoadingLiked;
   String? get error => _error;
 
-  // Byt mellan filmer och serier
+  void setGenreFilter(String? genre) {
+    _selectedGenre = genre;
+    notifyListeners();
+
+    // Ladda fler om vi inte har tillräckligt
+    if (_filteredList.length < 5 && !_isLoading) {
+      loadItems();
+    }
+  }
+
   void setMediaType(MediaType type) {
     if (_currentMediaType != type) {
       _currentMediaType = type;
+      _selectedGenre = null;
       notifyListeners();
 
-      // Ladda om det behövs
       if (currentList.isEmpty && !_isLoading) {
         loadItems();
       }
     }
   }
 
-  // Sätt användare och ladda sparade likes
   Future<void> setUser(String userId, List<String> savedLikedIds) async {
     _currentUserId = userId;
     _likedIds.addAll(savedLikedIds);
+    _swipedIds.addAll(savedLikedIds); // Markera redan likade som swipade
 
     if (savedLikedIds.isNotEmpty) {
       await _loadLikedItems(savedLikedIds);
@@ -80,10 +105,8 @@ class SwipeViewModel extends ChangeNotifier {
 
     try {
       final items = await _tmdbService.getItemsByUniqueIds(uniqueIds);
-
       _likedMovies = items.where((m) => m.mediaType == 'movie').toList();
       _likedTVShows = items.where((m) => m.mediaType == 'tv').toList();
-
       print('✅ Loaded ${_likedMovies.length} movies and ${_likedTVShows.length} TV shows');
     } catch (e) {
       print('❌ Error loading liked items: $e');
@@ -93,17 +116,14 @@ class SwipeViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Ladda items
   Future<void> loadItems({bool reset = false}) async {
     if (_isLoading) return;
 
     if (reset) {
       if (_currentMediaType == MediaType.movies) {
         _movies.clear();
-        _movieIndex = 0;
       } else {
         _tvShows.clear();
-        _tvIndex = 0;
       }
     }
 
@@ -120,24 +140,16 @@ class SwipeViewModel extends ChangeNotifier {
         newItems = await _tmdbService.getPopularTVShows();
       }
 
-      // Filtrera bort sedda och redan likade
-      final filteredItems = newItems.where((item) {
-        return !_seenIds.contains(item.uniqueId) &&
-            !_likedIds.contains(item.uniqueId) &&
-            item.posterUrl.isNotEmpty;
-      }).toList();
+      // Filtrera bort items utan poster
+      final validItems = newItems.where((item) => item.posterUrl.isNotEmpty).toList();
 
-      for (var item in filteredItems) {
-        _seenIds.add(item.uniqueId);
-      }
-
-      // Extra shuffle
-      filteredItems.shuffle(_random);
+      // Shuffle
+      validItems.shuffle(Random(DateTime.now().millisecondsSinceEpoch));
 
       if (_currentMediaType == MediaType.movies) {
-        _movies.addAll(filteredItems);
+        _movies.addAll(validItems);
       } else {
-        _tvShows.addAll(filteredItems);
+        _tvShows.addAll(validItems);
       }
 
       _isLoading = false;
@@ -149,12 +161,14 @@ class SwipeViewModel extends ChangeNotifier {
     }
   }
 
-  // Swipe höger (gilla)
   Future<void> swipeRight() async {
-    if (currentItem == null) return;
+    final item = currentItem;
+    if (item == null) return;
 
-    final item = currentItem!;
+    // Markera som swipad
+    _swipedIds.add(item.uniqueId);
 
+    // Lägg till i likes om inte redan där
     if (!_likedIds.contains(item.uniqueId)) {
       _likedIds.add(item.uniqueId);
 
@@ -169,30 +183,28 @@ class SwipeViewModel extends ChangeNotifier {
       }
     }
 
-    _moveToNext();
-  }
-
-  // Swipe vänster (ogilla)
-  void swipeLeft() {
-    if (currentItem == null) return;
-    _moveToNext();
-  }
-
-  void _moveToNext() {
-    if (_currentMediaType == MediaType.movies) {
-      _movieIndex++;
-    } else {
-      _tvIndex++;
-    }
     notifyListeners();
+    _checkAndLoadMore();
+  }
 
-    // Ladda fler om vi närmar oss slutet
-    if (currentIndex >= currentList.length - 5 && !_isLoading) {
+  void swipeLeft() {
+    final item = currentItem;
+    if (item == null) return;
+
+    // Markera som swipad
+    _swipedIds.add(item.uniqueId);
+
+    notifyListeners();
+    _checkAndLoadMore();
+  }
+
+  void _checkAndLoadMore() {
+    // Ladda fler om vi har få kvar
+    if (_filteredList.length < 5 && !_isLoading) {
       loadItems();
     }
   }
 
-  // Ta bort liked
   Future<void> removeLikedItem(Movie item) async {
     if (item.mediaType == 'movie') {
       _likedMovies.removeWhere((m) => m.uniqueId == item.uniqueId);
@@ -209,17 +221,16 @@ class SwipeViewModel extends ChangeNotifier {
   }
 
   void reset() {
-    _movieIndex = 0;
-    _tvIndex = 0;
     _movies.clear();
     _tvShows.clear();
-    _seenIds.clear();
+    _swipedIds.clear();
     _likedMovies.clear();
     _likedTVShows.clear();
     _likedIds.clear();
     _currentUserId = null;
     _error = null;
     _currentMediaType = MediaType.movies;
+    _selectedGenre = null;
     notifyListeners();
   }
 

@@ -6,7 +6,8 @@ class Movie {
   final double rating;
   final int year;
   final List<String> genres;
-  final String mediaType; // 'movie' eller 'tv'
+  final String mediaType;
+  final String originalLanguage;
 
   Movie({
     required this.id,
@@ -17,9 +18,9 @@ class Movie {
     required this.year,
     required this.genres,
     this.mediaType = 'movie',
+    this.originalLanguage = '',
   });
 
-  // Unik ID som kombinerar mediaType och id (för att undvika konflikter)
   String get uniqueId => '${mediaType}_$id';
 
   @override
