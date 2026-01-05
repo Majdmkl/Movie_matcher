@@ -24,7 +24,6 @@ class TMDBService {
     10767: 'Talk', 10768: 'War & Politics', 37: 'Western',
   };
 
-  // Provider logos - vanliga streaming-tjänster
   static const Map<int, String> providerNames = {
     8: 'Netflix',
     9: 'Amazon Prime Video',
@@ -112,8 +111,6 @@ class TMDBService {
     }
   }
 
-  // ==================== WATCH PROVIDERS ====================
-
   Future<List<WatchProvider>> getMovieWatchProviders(int movieId, {String region = 'SE'}) async {
     final url = Uri.parse('$_baseUrl/movie/$movieId/watch/providers?api_key=$_apiKey');
     
@@ -157,7 +154,6 @@ class TMDBService {
 
     final List<WatchProvider> providers = [];
 
-    // Flatrate = streaming (Netflix, Disney+, etc.)
     if (regionData['flatrate'] != null) {
       for (var provider in regionData['flatrate']) {
         providers.add(WatchProvider(
@@ -171,10 +167,8 @@ class TMDBService {
       }
     }
 
-    // Rent
     if (regionData['rent'] != null) {
       for (var provider in regionData['rent']) {
-        // Kolla om vi redan har denna provider
         if (!providers.any((p) => p.id == provider['provider_id'])) {
           providers.add(WatchProvider(
             id: provider['provider_id'],
@@ -188,7 +182,6 @@ class TMDBService {
       }
     }
 
-    // Buy
     if (regionData['buy'] != null) {
       for (var provider in regionData['buy']) {
         if (!providers.any((p) => p.id == provider['provider_id'])) {
@@ -206,8 +199,6 @@ class TMDBService {
 
     return providers;
   }
-
-  // ==================== GET BY ID ====================
 
   Future<Movie?> getMovieById(int movieId) async {
     final url = Uri.parse('$_baseUrl/movie/$movieId?api_key=$_apiKey&language=en-US');
@@ -265,8 +256,6 @@ class TMDBService {
 
     return items;
   }
-
-  // ==================== HELPERS ====================
 
   List<int> _getRandomPages(int count, int maxPage) {
     final Set<int> pages = {};
@@ -385,12 +374,11 @@ class TMDBService {
   }
 }
 
-// Watch Provider model
 class WatchProvider {
   final int id;
   final String name;
   final String logoPath;
-  final String type; // 'stream', 'rent', 'buy'
+  final String type;
 
   WatchProvider({
     required this.id,

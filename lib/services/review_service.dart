@@ -5,7 +5,6 @@ class ReviewService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String _collection = 'reviews';
 
-  // Skapa/uppdatera recension
   Future<bool> saveReview(Review review) async {
     try {
       await _firestore.collection(_collection).doc(review.id).set(review.toJson());
@@ -17,7 +16,6 @@ class ReviewService {
     }
   }
 
-  // Hämta recensioner för ett item (movie_123 eller tv_456)
   Future<List<Review>> getReviewsForItem(String itemId) async {
     try {
       final query = await _firestore
@@ -32,7 +30,6 @@ class ReviewService {
     }
   }
 
-  // Hämta recensioner från specifika användare (vänner)
   Future<List<Review>> getReviewsFromUsers(List<String> userIds) async {
     if (userIds.isEmpty) return [];
 
@@ -57,7 +54,6 @@ class ReviewService {
     }
   }
 
-  // Hämta användarens recension för ett specifikt item
   Future<Review?> getUserReviewForItem(String userId, String itemId) async {
     try {
       final query = await _firestore
@@ -77,7 +73,6 @@ class ReviewService {
     }
   }
 
-  // Ta bort recension
   Future<bool> deleteReview(String reviewId) async {
     try {
       await _firestore.collection(_collection).doc(reviewId).delete();
@@ -89,7 +84,6 @@ class ReviewService {
     }
   }
 
-  // Hämta alla recensioner från en användare
   Future<List<Review>> getUserReviews(String userId) async {
     try {
       final query = await _firestore

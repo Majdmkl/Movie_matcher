@@ -113,7 +113,6 @@ class AuthService {
     }
   }
 
-  // Lägg till liked item (movie_123 eller tv_456)
   void addLikedItem(String userId, String uniqueId) {
     _firestore.collection(_collection).doc(userId).update({
       'liked_movie_ids': FieldValue.arrayUnion([uniqueId]),
@@ -124,7 +123,6 @@ class AuthService {
     });
   }
 
-  // Ta bort liked item
   void removeLikedItem(String userId, String uniqueId) {
     _firestore.collection(_collection).doc(userId).update({
       'liked_movie_ids': FieldValue.arrayRemove([uniqueId]),
@@ -144,8 +142,6 @@ class AuthService {
       print('⚠️ Could not update name in Firebase: $e');
     });
   }
-
-  // === FRIENDS ===
 
   Future<AppUser?> searchUserByEmail(String email) async {
     try {
