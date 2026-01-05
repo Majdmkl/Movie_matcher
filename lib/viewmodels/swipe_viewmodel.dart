@@ -17,7 +17,7 @@ class SwipeViewModel extends ChangeNotifier {
   List<Movie> _likedMovies = [];
   List<Movie> _likedTVShows = [];
 
-  final Set<String> _swipedIds = {}; // IDs vi redan swipat på
+  final Set<String> _swipedIds = {};
   final Set<String> _likedIds = {};
 
   bool _isLoading = false;
@@ -28,18 +28,15 @@ class SwipeViewModel extends ChangeNotifier {
   MediaType _currentMediaType = MediaType.movies;
   String? _selectedGenre;
 
-  // Getters
   MediaType get currentMediaType => _currentMediaType;
   String? get selectedGenre => _selectedGenre;
 
   List<Movie> get currentList => _currentMediaType == MediaType.movies ? _movies : _tvShows;
 
-  // Filtrerad lista - exkluderar swipade och applicerar genre-filter
   List<Movie> get _filteredList {
     var list = currentList.where((m) => !_swipedIds.contains(m.uniqueId)).toList();
     
     if (_selectedGenre != null) {
-      // Special hantering för Arabic och Turkish (språk, inte genre)
       if (_selectedGenre == 'Arabic') {
         list = list.where((m) => m.originalLanguage == 'ar').toList();
       } else if (_selectedGenre == 'Turkish') {
@@ -71,7 +68,6 @@ class SwipeViewModel extends ChangeNotifier {
     _selectedGenre = genre;
     notifyListeners();
 
-    // Ladda fler om vi inte har tillräckligt
     if (_filteredList.length < 5 && !_isLoading) {
       loadItems();
     }
@@ -92,7 +88,7 @@ class SwipeViewModel extends ChangeNotifier {
   Future<void> setUser(String userId, List<String> savedLikedIds) async {
     _currentUserId = userId;
     _likedIds.addAll(savedLikedIds);
-    _swipedIds.addAll(savedLikedIds); // Markera redan likade som swipade
+    _swipedIds.addAll(savedLikedIds);
 
     if (savedLikedIds.isNotEmpty) {
       await _loadLikedItems(savedLikedIds);
@@ -140,10 +136,8 @@ class SwipeViewModel extends ChangeNotifier {
         newItems = await _tmdbService.getPopularTVShows();
       }
 
-      // Filtrera bort items utan poster
       final validItems = newItems.where((item) => item.posterUrl.isNotEmpty).toList();
 
-      // Shuffle
       validItems.shuffle(Random(DateTime.now().millisecondsSinceEpoch));
 
       if (_currentMediaType == MediaType.movies) {
@@ -165,10 +159,8 @@ class SwipeViewModel extends ChangeNotifier {
     final item = currentItem;
     if (item == null) return;
 
-    // Markera som swipad
     _swipedIds.add(item.uniqueId);
 
-    // Lägg till i likes om inte redan där
     if (!_likedIds.contains(item.uniqueId)) {
       _likedIds.add(item.uniqueId);
 
@@ -191,7 +183,6 @@ class SwipeViewModel extends ChangeNotifier {
     final item = currentItem;
     if (item == null) return;
 
-    // Markera som swipad
     _swipedIds.add(item.uniqueId);
 
     notifyListeners();
@@ -199,7 +190,6 @@ class SwipeViewModel extends ChangeNotifier {
   }
 
   void _checkAndLoadMore() {
-    // Ladda fler om vi har få kvar
     if (_filteredList.length < 5 && !_isLoading) {
       loadItems();
     }

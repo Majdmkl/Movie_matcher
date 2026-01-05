@@ -139,8 +139,6 @@ class AuthViewModel extends ChangeNotifier {
     _authService.updateName(_currentUser!.id, newName);
   }
 
-  // === FRIENDS ===
-
   Future<void> loadFriends() async {
     if (_currentUser == null) return;
 
