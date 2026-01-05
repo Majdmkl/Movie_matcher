@@ -4,9 +4,9 @@ class Review {
   final String id;
   final String userId;
   final String userName;
-  final String itemId;     // movie_123 eller tv_456
+  final String itemId;
   final String itemTitle;
-  final String itemType;   // 'movie' eller 'tv'
+  final String itemType;
   final double rating;
   final String comment;
   final DateTime createdAt;

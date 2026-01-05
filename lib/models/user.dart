@@ -4,7 +4,7 @@ class AppUser {
   final String id;
   final String email;
   final String name;
-  final List<String> likedMovieIds; // Format: "movie_123" eller "tv_456"
+  final List<String> likedMovieIds;
   final List<String> friendIds;
   final DateTime createdAt;
 
@@ -19,7 +19,6 @@ class AppUser {
         friendIds = friendIds ?? [],
         createdAt = createdAt ?? DateTime.now();
 
-  // Hjälpmetoder för att filtrera
   List<String> get likedMovies => likedMovieIds.where((id) => id.startsWith('movie_')).toList();
   List<String> get likedTVShows => likedMovieIds.where((id) => id.startsWith('tv_')).toList();
 
@@ -33,12 +32,10 @@ class AppUser {
       createdAt = DateTime.now();
     }
 
-    // Hantera både gamla (int) och nya (String) format
     List<String> likedIds = [];
     if (json['liked_movie_ids'] != null) {
       for (var id in json['liked_movie_ids']) {
         if (id is int) {
-          // Gammalt format - anta att det är en film
           likedIds.add('movie_$id');
         } else if (id is String) {
           likedIds.add(id);
