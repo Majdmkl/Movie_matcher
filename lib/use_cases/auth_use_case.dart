@@ -7,7 +7,6 @@ class AuthUseCase {
   AuthUseCase({AuthRepository? repository})
       : _repository = repository ?? AuthRepository();
 
-  /// Initialize and restore user session
   Future<AppUser?> initializeSession() async {
     final userId = _repository.currentUserId;
     if (userId != null) {
@@ -16,7 +15,6 @@ class AuthUseCase {
     return null;
   }
 
-  /// Validate email format
   String? validateEmail(String email) {
     if (email.trim().isEmpty) {
       return 'Please enter your email';
@@ -27,7 +25,6 @@ class AuthUseCase {
     return null;
   }
 
-  /// Validate password
   String? validatePassword(String password, {bool isRegistration = false}) {
     if (password.isEmpty) {
       return 'Please enter your password';
@@ -38,7 +35,6 @@ class AuthUseCase {
     return null;
   }
 
-  /// Validate name
   String? validateName(String name) {
     if (name.trim().isEmpty) {
       return 'Please enter your name';
@@ -46,7 +42,6 @@ class AuthUseCase {
     return null;
   }
 
-  /// Register new user with validation
   Future<AppUser?> registerUser({
     required String email,
     required String password,
@@ -68,7 +63,6 @@ class AuthUseCase {
     );
   }
 
-  /// Login user with validation
   Future<AppUser?> loginUser({
     required String email,
     required String password,
@@ -85,12 +79,10 @@ class AuthUseCase {
     );
   }
 
-  /// Logout current user
   Future<void> logoutUser() async {
     await _repository.logout();
   }
 
-  /// Update user's display name with validation
   Future<void> updateUserName(String userId, String newName) async {
     final nameError = validateName(newName);
     if (nameError != null) throw Exception(nameError);
@@ -98,13 +90,11 @@ class AuthUseCase {
     _repository.updateUserName(userId, newName);
   }
 
-  /// Load user's friends
   Future<List<AppUser>> loadFriends(List<String> friendIds) async {
     if (friendIds.isEmpty) return [];
     return await _repository.getFriends(friendIds);
   }
 
-  /// Search for user by email with validation
   Future<AppUser?> searchUser(String email) async {
     if (email.trim().isEmpty) return null;
 
@@ -114,12 +104,10 @@ class AuthUseCase {
     return await _repository.searchUserByEmail(email);
   }
 
-  /// Validate and add friend
   Future<bool> addFriend({
     required AppUser currentUser,
     required AppUser friendToAdd,
   }) async {
-    // Validation logic
     if (currentUser.id == friendToAdd.id) {
       throw Exception('You cannot add yourself as a friend');
     }
@@ -131,24 +119,20 @@ class AuthUseCase {
     return await _repository.addFriend(currentUser.id, friendToAdd.id);
   }
 
-  /// Remove friend
   Future<bool> removeFriend(String userId, String friendId) async {
     return await _repository.removeFriend(userId, friendId);
   }
 
-  /// Update user object after friend is added
   AppUser updateUserWithNewFriend(AppUser currentUser, String friendId) {
     final updatedFriendIds = List<String>.from(currentUser.friendIds)..add(friendId);
     return currentUser.copyWith(friendIds: updatedFriendIds);
   }
 
-  /// Update user object after friend is removed
   AppUser updateUserWithRemovedFriend(AppUser currentUser, String friendId) {
     final updatedFriendIds = List<String>.from(currentUser.friendIds)..remove(friendId);
     return currentUser.copyWith(friendIds: updatedFriendIds);
   }
 
-  /// Get user-friendly error message
   String getErrorMessage(dynamic error) {
     return _repository.getErrorMessage(error);
   }

@@ -6,7 +6,6 @@ import '../use_cases/auth_use_case.dart';
 class AuthViewModel extends ChangeNotifier {
   final AuthUseCase _useCase;
 
-  // State
   AppUser? _currentUser;
   bool _isLoading = false;
   String? _error;
@@ -16,7 +15,6 @@ class AuthViewModel extends ChangeNotifier {
   AuthViewModel({AuthUseCase? useCase})
       : _useCase = useCase ?? AuthUseCase();
 
-  // Getters
   AppUser? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -25,7 +23,6 @@ class AuthViewModel extends ChangeNotifier {
   bool get isLoadingFriends => _isLoadingFriends;
   int get likedCount => _currentUser?.likedMovieIds.length ?? 0;
 
-  /// Initialize auth state
   Future<void> initialize() async {
     _isLoading = true;
     notifyListeners();
@@ -46,7 +43,6 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  /// Register new user
   Future<bool> register({
     required String email,
     required String password,
@@ -79,7 +75,6 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  /// Login existing user
   Future<bool> login({
     required String email,
     required String password,
@@ -114,7 +109,6 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  /// Logout current user
   Future<void> logout() async {
     await _useCase.logoutUser();
     _currentUser = null;
@@ -122,7 +116,6 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Add a liked item to current user
   void addLikedItem(String uniqueId) {
     if (_currentUser == null) return;
 
@@ -133,7 +126,6 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  /// Update user's display name
   void updateName(String newName) {
     if (_currentUser == null) return;
 
@@ -143,7 +135,6 @@ class AuthViewModel extends ChangeNotifier {
     _useCase.updateUserName(_currentUser!.id, newName);
   }
 
-  /// Load user's friends
   Future<void> loadFriends() async {
     if (_currentUser == null) return;
 
@@ -161,13 +152,11 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Search for a user by email
   Future<AppUser?> searchUser(String email) async {
     if (email.trim().isEmpty) return null;
     return await _useCase.searchUser(email);
   }
 
-  /// Add a friend
   Future<bool> addFriend(AppUser friend) async {
     if (_currentUser == null) return false;
 
@@ -191,7 +180,6 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  /// Remove a friend
   Future<bool> removeFriend(String friendId) async {
     if (_currentUser == null) return false;
 
@@ -206,14 +194,10 @@ class AuthViewModel extends ChangeNotifier {
     return success;
   }
 
-  /// Get detailed friend info (delegates to use case which gets from repository)
   Future<AppUser?> getFriendDetails(String friendId) async {
-    // Note: This should ideally be in AuthUseCase, but keeping simple for now
-    // The repository already has getUser method
-    return null; // Implement if needed by adding to use case
+    return null;
   }
 
-  /// Clear error message
   void clearError() {
     _error = null;
     notifyListeners();

@@ -2,13 +2,11 @@ import 'package:flutter/foundation.dart';
 import '../models/movie.dart';
 import '../use_cases/swipe_use_case.dart';
 
-// MediaType is exported from SwipeUseCase
 export '../use_cases/swipe_use_case.dart' show MediaType;
 
 class SwipeViewModel extends ChangeNotifier {
   final SwipeUseCase _useCase;
 
-  // State
   List<Movie> _movies = [];
   List<Movie> _tvShows = [];
   List<Movie> _likedMovies = [];
@@ -27,7 +25,6 @@ class SwipeViewModel extends ChangeNotifier {
   SwipeViewModel({SwipeUseCase? useCase})
       : _useCase = useCase ?? SwipeUseCase();
 
-  // Getters
   MediaType get currentMediaType => _currentMediaType;
   String? get selectedGenre => _selectedGenre;
   List<Movie> get currentList => _currentMediaType == MediaType.movies ? _movies : _tvShows;
@@ -52,7 +49,6 @@ class SwipeViewModel extends ChangeNotifier {
   Movie? get nextItem => _filteredList.length > 1 ? _filteredList[1] : null;
   bool get hasItems => currentItem != null;
 
-  // Actions
   void setGenreFilter(String? genre) {
     _selectedGenre = genre;
     notifyListeners();
