@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/auth_viewmodel.dart';
+import '../viewmodels/friends_viewmodel.dart';
 import '../models/user.dart';
 import 'friend_matches_view.dart';
 
@@ -12,44 +13,68 @@ class FriendsView extends StatefulWidget {
 }
 
 class _FriendsViewState extends State<FriendsView> {
+  late FriendsViewModel _friendsViewModel;
+
+  @override
+  void initState() {
+    super.initState();
+    _friendsViewModel = FriendsViewModel();
+    _loadFriends();
+  }
+
+  @override
+  void dispose() {
+    _friendsViewModel.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadFriends() async {
+    final authViewModel = context.read<AuthViewModel>();
+    final friendIds = authViewModel.currentUser?.friendIds ?? [];
+    await _friendsViewModel.loadFriends(friendIds);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text(
-          'Friends',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person_add),
-            onPressed: () => _showAddFriendDialog(context),
+    return ChangeNotifierProvider.value(
+      value: _friendsViewModel,
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          title: const Text(
+            'Friends',
+            style: TextStyle(fontWeight: FontWeight.bold),
           ),
-        ],
-      ),
-      body: Consumer<AuthViewModel>(
-        builder: (context, authViewModel, child) {
-          if (authViewModel.isLoadingFriends) {
-            return const Center(
-              child: CircularProgressIndicator(color: Colors.purple),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.person_add),
+              onPressed: () => _showAddFriendDialog(context),
+            ),
+          ],
+        ),
+        body: Consumer<FriendsViewModel>(
+          builder: (context, friendsVM, child) {
+            if (friendsVM.isLoading) {
+              return const Center(
+                child: CircularProgressIndicator(color: Colors.purple),
+              );
+            }
+
+            if (!friendsVM.hasFriends) {
+              return _buildEmptyState(context);
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: friendsVM.friends.length,
+              itemBuilder: (context, index) {
+                final friend = friendsVM.friends[index];
+                return _buildFriendCard(context, friend);
+              },
             );
-          }
-
-          if (authViewModel.friends.isEmpty) {
-            return _buildEmptyState(context);
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: authViewModel.friends.length,
-            itemBuilder: (context, index) {
-              final friend = authViewModel.friends[index];
-              return _buildFriendCard(context, friend, authViewModel);
-            },
-          );
-        },
+          },
+        ),
       ),
     );
   }
@@ -112,7 +137,7 @@ class _FriendsViewState extends State<FriendsView> {
     );
   }
 
-  Widget _buildFriendCard(BuildContext context, AppUser friend, AuthViewModel authViewModel) {
+  Widget _buildFriendCard(BuildContext context, AppUser friend) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -165,7 +190,6 @@ class _FriendsViewState extends State<FriendsView> {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Visa matches
             IconButton(
               icon: const Icon(Icons.movie, color: Colors.purple),
               onPressed: () {
@@ -177,10 +201,9 @@ class _FriendsViewState extends State<FriendsView> {
                 );
               },
             ),
-            // Ta bort vän
             IconButton(
               icon: Icon(Icons.person_remove, color: Colors.red[400]),
-              onPressed: () => _showRemoveFriendDialog(context, friend, authViewModel),
+              onPressed: () => _showRemoveFriendDialog(context, friend),
             ),
           ],
         ),
@@ -190,175 +213,199 @@ class _FriendsViewState extends State<FriendsView> {
 
   void _showAddFriendDialog(BuildContext context) {
     final emailController = TextEditingController();
-    bool isSearching = false;
-    AppUser? foundUser;
-    String? errorMessage;
+    final authViewModel = context.read<AuthViewModel>();
+    final currentUser = authViewModel.currentUser;
+
+    if (currentUser == null) return;
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF1A1A1A),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Row(
-              children: [
-                Icon(Icons.person_add, color: Colors.purple),
-                SizedBox(width: 12),
-                Text('Add Friend', style: TextStyle(color: Colors.white)),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: emailController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'Enter friend\'s email',
-                    hintStyle: TextStyle(color: Colors.grey[600]),
-                    prefixIcon: Icon(Icons.email, color: Colors.grey[600]),
-                    filled: true,
-                    fillColor: Colors.black.withOpacity(0.3),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                  keyboardType: TextInputType.emailAddress,
-                ),
-                const SizedBox(height: 16),
-
-                if (isSearching)
-                  const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: CircularProgressIndicator(color: Colors.purple),
-                  ),
-
-                if (errorMessage != null)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            errorMessage!,
-                            style: const TextStyle(color: Colors.red, fontSize: 13),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                if (foundUser != null)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.green.withOpacity(0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: Colors.purple,
-                          child: Text(
-                            foundUser!.name.isNotEmpty ? foundUser!.name[0].toUpperCase() : '?',
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                foundUser!.name,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              Text(
-                                foundUser!.email,
-                                style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(Icons.check_circle, color: Colors.green),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
+      builder: (dialogContext) => ChangeNotifierProvider.value(
+        value: _friendsViewModel,
+        child: Consumer<FriendsViewModel>(
+          builder: (context, friendsVM, child) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Row(
+                children: [
+                  Icon(Icons.person_add, color: Colors.purple),
+                  SizedBox(width: 12),
+                  Text('Add Friend', style: TextStyle(color: Colors.white)),
+                ],
               ),
-              if (foundUser == null)
-                ElevatedButton(
-                  onPressed: isSearching
-                      ? null
-                      : () async {
-                          setDialogState(() {
-                            isSearching = true;
-                            errorMessage = null;
-                            foundUser = null;
-                          });
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: emailController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Enter friend\'s email',
+                      hintStyle: TextStyle(color: Colors.grey[600]),
+                      prefixIcon: Icon(Icons.email, color: Colors.grey[600]),
+                      filled: true,
+                      fillColor: Colors.black.withOpacity(0.3),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                    onSubmitted: (value) {
+                      if (friendsVM.searchState != FriendSearchState.searching) {
+                        friendsVM.searchFriend(
+                          email: emailController.text,
+                          currentUser: currentUser,
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
 
-                          final authViewModel = context.read<AuthViewModel>();
-                          final user = await authViewModel.searchUser(emailController.text);
+                  // Loading state
+                  if (friendsVM.isSearching)
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: CircularProgressIndicator(color: Colors.purple),
+                    ),
 
-                          setDialogState(() {
-                            isSearching = false;
-                            if (user == null) {
-                              errorMessage = 'No user found with this email';
-                            } else if (user.id == authViewModel.currentUser?.id) {
-                              errorMessage = 'You cannot add yourself';
-                            } else if (authViewModel.currentUser?.friendIds.contains(user.id) == true) {
-                              errorMessage = 'Already friends';
-                            } else {
-                              foundUser = user;
-                            }
-                          });
-                        },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
-                  child: const Text('Search', style: TextStyle(color: Colors.white)),
-                ),
-              if (foundUser != null)
-                ElevatedButton(
-                  onPressed: () async {
-                    final authViewModel = context.read<AuthViewModel>();
-                    final success = await authViewModel.addFriend(foundUser!);
-                    if (success) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('${foundUser!.name} added as friend!'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    }
+                  // Error state
+                  if (friendsVM.searchState == FriendSearchState.error &&
+                      friendsVM.searchError != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              friendsVM.searchError!,
+                              style: const TextStyle(color: Colors.red, fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // Found user state
+                  if (friendsVM.searchState == FriendSearchState.found &&
+                      friendsVM.foundUser != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: Colors.purple,
+                            child: Text(
+                              friendsVM.foundUser!.name.isNotEmpty
+                                  ? friendsVM.foundUser!.name[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  friendsVM.foundUser!.name,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  friendsVM.foundUser!.email,
+                                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.check_circle, color: Colors.green),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    friendsVM.resetSearchDialog();
+                    Navigator.pop(dialogContext);
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                  child: const Text('Add Friend', style: TextStyle(color: Colors.white)),
+                  child: const Text('Cancel'),
                 ),
-            ],
-          );
-        },
+                if (friendsVM.searchState != FriendSearchState.found)
+                  ElevatedButton(
+                    onPressed: friendsVM.isSearching
+                        ? null
+                        : () {
+                      friendsVM.searchFriend(
+                        email: emailController.text,
+                        currentUser: currentUser,
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
+                    child: const Text('Search', style: TextStyle(color: Colors.white)),
+                  ),
+                if (friendsVM.searchState == FriendSearchState.found &&
+                    friendsVM.foundUser != null)
+                  ElevatedButton(
+                    onPressed: () async {
+                      final success = await friendsVM.addFriend(
+                        currentUser: currentUser,
+                        friendToAdd: friendsVM.foundUser!,
+                      );
+
+                      if (success) {
+                        // Update AuthViewModel's friend list
+                        await authViewModel.addFriend(friendsVM.foundUser!);
+
+                        friendsVM.resetSearchDialog();
+                        Navigator.pop(dialogContext);
+
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('${friendsVM.foundUser!.name} added as friend!'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    child: const Text('Add Friend', style: TextStyle(color: Colors.white)),
+                  ),
+              ],
+            );
+          },
+        ),
       ),
-    );
+    ).then((_) {
+      // Reset search state when dialog closes
+      _friendsViewModel.resetSearchDialog();
+    });
   }
 
-  void _showRemoveFriendDialog(BuildContext context, AppUser friend, AuthViewModel authViewModel) {
+  void _showRemoveFriendDialog(BuildContext context, AppUser friend) {
+    final authViewModel = context.read<AuthViewModel>();
+    final currentUser = authViewModel.currentUser;
+
+    if (currentUser == null) return;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -375,8 +422,16 @@ class _FriendsViewState extends State<FriendsView> {
           ),
           ElevatedButton(
             onPressed: () async {
-              await authViewModel.removeFriend(friend.id);
-              Navigator.pop(context);
+              final success = await _friendsViewModel.removeFriend(
+                userId: currentUser.id,
+                friendId: friend.id,
+              );
+
+              if (success) {
+                // Update AuthViewModel
+                await authViewModel.removeFriend(friend.id);
+                Navigator.pop(context);
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Remove', style: TextStyle(color: Colors.white)),

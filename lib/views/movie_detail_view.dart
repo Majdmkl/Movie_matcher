@@ -3,7 +3,8 @@ import 'package:provider/provider.dart';
 import '../models/movie.dart';
 import '../models/review.dart';
 import '../viewmodels/auth_viewmodel.dart';
-import '../services/review_service.dart';
+import '../viewmodels/review_viewmodel.dart';
+import '../viewmodels/watch_provider_viewmodel.dart';
 import '../services/tmdb_service.dart';
 
 class MovieDetailView extends StatefulWidget {
@@ -21,108 +22,87 @@ class MovieDetailView extends StatefulWidget {
 }
 
 class _MovieDetailViewState extends State<MovieDetailView> {
-  final ReviewService _reviewService = ReviewService();
-  final TMDBService _tmdbService = TMDBService();
-  
-  List<Review> _reviews = [];
-  Review? _myReview;
-  bool _isLoading = true;
-  
-  List<WatchProvider> _watchProviders = [];
-  bool _isLoadingProviders = true;
+  late ReviewViewModel _reviewViewModel;
+  late WatchProviderViewModel _providerViewModel;
 
   bool get isTV => widget.movie.mediaType == 'tv';
 
   @override
   void initState() {
     super.initState();
-    _loadReviews();
-    _loadWatchProviders();
+    _reviewViewModel = ReviewViewModel();
+    _providerViewModel = WatchProviderViewModel();
+    _loadData();
   }
 
-  Future<void> _loadReviews() async {
+  @override
+  void dispose() {
+    _reviewViewModel.dispose();
+    _providerViewModel.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadData() async {
     final authViewModel = context.read<AuthViewModel>();
     final currentUser = authViewModel.currentUser;
 
-    List<String> userIds = [];
     if (currentUser != null) {
-      userIds = [currentUser.id, ...currentUser.friendIds];
+      await _reviewViewModel.loadReviews(
+        movie: widget.movie,
+        currentUser: currentUser,
+      );
     }
 
-    final allReviews = await _reviewService.getReviewsForItem(widget.movie.uniqueId);
-    _reviews = allReviews.where((r) => userIds.contains(r.userId)).toList();
-
-    if (currentUser != null) {
-      _myReview = _reviews.where((r) => r.userId == currentUser.id).firstOrNull;
-    }
-
-    setState(() => _isLoading = false);
-  }
-
-  Future<void> _loadWatchProviders() async {
-    try {
-      List<WatchProvider> providers;
-      if (isTV) {
-        providers = await _tmdbService.getTVWatchProviders(widget.movie.id);
-      } else {
-        providers = await _tmdbService.getMovieWatchProviders(widget.movie.id);
-      }
-      setState(() {
-        _watchProviders = providers;
-        _isLoadingProviders = false;
-      });
-    } catch (e) {
-      print('❌ Error loading watch providers: $e');
-      setState(() => _isLoadingProviders = false);
-    }
+    await _providerViewModel.loadProviders(widget.movie);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1A0A2E), Color(0xFF0D0D0D)],
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: _reviewViewModel),
+        ChangeNotifierProvider.value(value: _providerViewModel),
+      ],
+      child: Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF1A0A2E), Color(0xFF0D0D0D)],
+            ),
           ),
-        ),
-        child: CustomScrollView(
-          slivers: [
-            _buildSliverAppBar(),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildTitleSection(),
-                    const SizedBox(height: 16),
-                    _buildInfoRow(),
-                    const SizedBox(height: 16),
-                    _buildGenres(),
-                    const SizedBox(height: 20),
-                    
-                    // Streaming Providers Section
-                    _buildWatchProvidersSection(),
-                    const SizedBox(height: 24),
-                    
-                    _buildOverview(),
-                    const SizedBox(height: 32),
-
-                    if (widget.showWriteReview) ...[
-                      _buildWriteReviewSection(),
+          child: CustomScrollView(
+            slivers: [
+              _buildSliverAppBar(),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildTitleSection(),
+                      const SizedBox(height: 16),
+                      _buildInfoRow(),
+                      const SizedBox(height: 16),
+                      _buildGenres(),
+                      const SizedBox(height: 20),
+                      _buildWatchProvidersSection(),
                       const SizedBox(height: 24),
+                      _buildOverview(),
+                      const SizedBox(height: 32),
+                      if (widget.showWriteReview) ...[
+                        _buildWriteReviewSection(),
+                        const SizedBox(height: 24),
+                      ],
+                      _buildReviewsSection(),
+                      const SizedBox(height: 40),
                     ],
-
-                    _buildReviewsSection(),
-                    const SizedBox(height: 40),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -164,7 +144,6 @@ class _MovieDetailViewState extends State<MovieDetailView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Type badge
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
@@ -192,8 +171,6 @@ class _MovieDetailViewState extends State<MovieDetailView> {
           ),
         ),
         const SizedBox(height: 12),
-        
-        // Title
         Text(
           widget.movie.title,
           style: const TextStyle(
@@ -271,131 +248,133 @@ class _MovieDetailViewState extends State<MovieDetailView> {
   }
 
   Widget _buildWatchProvidersSection() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.blue.withOpacity(0.15),
-            Colors.purple.withOpacity(0.1),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.blue.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Colors.blue, Colors.purple],
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.play_circle_filled, color: Colors.white, size: 20),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Where to Watch',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+    return Consumer<WatchProviderViewModel>(
+      builder: (context, providerVM, child) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.blue.withOpacity(0.15),
+                Colors.purple.withOpacity(0.1),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.blue.withOpacity(0.3)),
           ),
-          const SizedBox(height: 16),
-
-          if (_isLoadingProviders)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: CircularProgressIndicator(color: Colors.blue, strokeWidth: 2),
-              ),
-            )
-          else if (_watchProviders.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Icon(Icons.info_outline, color: Colors.grey[500], size: 20),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Colors.blue, Colors.purple],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.play_circle_filled, color: Colors.white, size: 20),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'No streaming info available for your region',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                  const Text(
+                    'Where to Watch',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
               ),
-            )
-          else
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Streaming services
-                if (_watchProviders.any((p) => p.type == 'stream')) ...[
-                  _buildProviderCategory(
-                    'Stream',
-                    Icons.subscriptions,
-                    Colors.green,
-                    _watchProviders.where((p) => p.type == 'stream').toList(),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                
-                // Rent
-                if (_watchProviders.any((p) => p.type == 'rent')) ...[
-                  _buildProviderCategory(
-                    'Rent',
-                    Icons.local_movies,
-                    Colors.orange,
-                    _watchProviders.where((p) => p.type == 'rent').toList(),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                
-                // Buy
-                if (_watchProviders.any((p) => p.type == 'buy'))
-                  _buildProviderCategory(
-                    'Buy',
-                    Icons.shopping_cart,
-                    Colors.purple,
-                    _watchProviders.where((p) => p.type == 'buy').toList(),
-                  ),
+              const SizedBox(height: 16),
 
-                const SizedBox(height: 12),
-                // JustWatch attribution
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+              if (providerVM.isLoading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: CircularProgressIndicator(color: Colors.blue, strokeWidth: 2),
+                  ),
+                )
+              else if (!providerVM.hasProviders)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.grey[500], size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'No streaming info available for your region',
+                          style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.info_outline, size: 12, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Data provided by JustWatch',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 10),
+                    if (providerVM.streamingProviders.isNotEmpty) ...[
+                      _buildProviderCategory(
+                        'Stream',
+                        Icons.subscriptions,
+                        Colors.green,
+                        providerVM.streamingProviders,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (providerVM.rentProviders.isNotEmpty) ...[
+                      _buildProviderCategory(
+                        'Rent',
+                        Icons.local_movies,
+                        Colors.orange,
+                        providerVM.rentProviders,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (providerVM.buyProviders.isNotEmpty)
+                      _buildProviderCategory(
+                        'Buy',
+                        Icons.shopping_cart,
+                        Colors.purple,
+                        providerVM.buyProviders,
+                      ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.info_outline, size: 12, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Data provided by JustWatch',
+                          style: TextStyle(color: Colors.grey[600], fontSize: 10),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-        ],
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildProviderCategory(String title, IconData icon, Color color, List<WatchProvider> providers) {
+  Widget _buildProviderCategory(
+      String title,
+      IconData icon,
+      Color color,
+      List<WatchProvider> providers,
+      ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -504,173 +483,179 @@ class _MovieDetailViewState extends State<MovieDetailView> {
   }
 
   Widget _buildWriteReviewSection() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.purple.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Colors.purple, Colors.deepPurple],
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.rate_review, color: Colors.white, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                _myReview != null ? 'Your Review' : 'Write a Review',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+    return Consumer<ReviewViewModel>(
+      builder: (context, reviewVM, child) {
+        final myReview = reviewVM.myReview;
 
-          if (_myReview != null) ...[
-            Row(
-              children: List.generate(5, (index) {
-                return Icon(
-                  index < _myReview!.rating ? Icons.star : Icons.star_border,
-                  color: Colors.amber,
-                  size: 28,
-                );
-              }),
-            ),
-            if (_myReview!.comment.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                _myReview!.comment,
-                style: TextStyle(color: Colors.grey[300], fontSize: 14),
-              ),
-            ],
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showReviewDialog(existingReview: _myReview),
-                    icon: const Icon(Icons.edit, size: 18),
-                    label: const Text('Edit'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.purple,
-                      side: const BorderSide(color: Colors.purple),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.purple.withOpacity(0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Colors.purple, Colors.deepPurple],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.rate_review, color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    myReview != null ? 'Your Review' : 'Write a Review',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              if (myReview != null) ...[
+                Row(
+                  children: List.generate(5, (index) {
+                    return Icon(
+                      index < myReview.rating ? Icons.star : Icons.star_border,
+                      color: Colors.amber,
+                      size: 28,
+                    );
+                  }),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _deleteReview,
-                    icon: const Icon(Icons.delete, size: 18),
-                    label: const Text('Delete'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                if (myReview.comment.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    myReview.comment,
+                    style: TextStyle(color: Colors.grey[300], fontSize: 14),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showReviewDialog(existingReview: myReview),
+                        icon: const Icon(Icons.edit, size: 18),
+                        label: const Text('Edit'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.purple,
+                          side: const BorderSide(color: Colors.purple),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _deleteReview,
+                        icon: const Icon(Icons.delete, size: 18),
+                        label: const Text('Delete'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showReviewDialog(),
+                    icon: const Icon(Icons.edit),
+                    label: const Text('Write Review'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                 ),
               ],
-            ),
-          ] else ...[
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => _showReviewDialog(),
-                icon: const Icon(Icons.edit),
-                label: const Text('Write Review'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.purple,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
   Widget _buildReviewsSection() {
-    final friendReviews = _reviews
-        .where((r) => r.userId != context.read<AuthViewModel>().currentUser?.id)
-        .toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    return Consumer<ReviewViewModel>(
+      builder: (context, reviewVM, child) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Colors.blue, Colors.cyan],
-                ),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.people, color: Colors.white, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              'Friend Reviews (${friendReviews.length})',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-
-        if (_isLoading)
-          const Center(child: CircularProgressIndicator(color: Colors.purple))
-        else if (friendReviews.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Center(
-              child: Column(
-                children: [
-                  Icon(Icons.chat_bubble_outline, size: 40, color: Colors.grey[600]),
-                  const SizedBox(height: 12),
-                  Text(
-                    'No friend reviews yet',
-                    style: TextStyle(color: Colors.grey[400], fontSize: 14),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Colors.blue, Colors.cyan],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                ],
-              ),
+                  child: const Icon(Icons.people, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Friend Reviews (${reviewVM.friendReviews.length})',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
-          )
-        else
-          ...friendReviews.map((review) => _buildReviewCard(review)),
-      ],
+            const SizedBox(height: 16),
+
+            if (reviewVM.isLoading)
+              const Center(child: CircularProgressIndicator(color: Colors.purple))
+            else if (reviewVM.friendReviews.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Center(
+                  child: Column(
+                    children: [
+                      Icon(Icons.chat_bubble_outline, size: 40, color: Colors.grey[600]),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No friend reviews yet',
+                        style: TextStyle(color: Colors.grey[400], fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ...reviewVM.friendReviews.map((review) => _buildReviewCard(review, reviewVM)),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildReviewCard(Review review) {
+  Widget _buildReviewCard(Review review, ReviewViewModel reviewVM) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -708,7 +693,7 @@ class _MovieDetailViewState extends State<MovieDetailView> {
                       ),
                     ),
                     Text(
-                      _formatDate(review.createdAt),
+                      reviewVM.formatDate(review.createdAt),
                       style: TextStyle(color: Colors.grey[500], fontSize: 12),
                     ),
                   ],
@@ -832,9 +817,9 @@ class _MovieDetailViewState extends State<MovieDetailView> {
                     child: ElevatedButton(
                       onPressed: rating > 0
                           ? () async {
-                              await _saveReview(rating, commentController.text, existingReview?.id);
-                              Navigator.pop(context);
-                            }
+                        await _saveReview(rating, commentController.text);
+                        Navigator.pop(context);
+                      }
                           : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.purple,
@@ -864,32 +849,29 @@ class _MovieDetailViewState extends State<MovieDetailView> {
     );
   }
 
-  Future<void> _saveReview(double rating, String comment, String? existingId) async {
+  Future<void> _saveReview(double rating, String comment) async {
     final authViewModel = context.read<AuthViewModel>();
     final currentUser = authViewModel.currentUser;
     if (currentUser == null) return;
 
-    final reviewId = existingId ?? '${currentUser.id}_${widget.movie.uniqueId}';
-
-    final review = Review(
-      id: reviewId,
-      userId: currentUser.id,
-      userName: currentUser.name,
-      itemId: widget.movie.uniqueId,
-      itemTitle: widget.movie.title,
-      itemType: widget.movie.mediaType,
+    final success = await _reviewViewModel.saveReview(
+      movie: widget.movie,
+      currentUser: currentUser,
       rating: rating,
       comment: comment,
-      createdAt: DateTime.now(),
     );
 
-    await _reviewService.saveReview(review);
-    await _loadReviews();
+    if (success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Review saved!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
   }
 
   Future<void> _deleteReview() async {
-    if (_myReview == null) return;
-
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -912,21 +894,15 @@ class _MovieDetailViewState extends State<MovieDetailView> {
     );
 
     if (confirmed == true) {
-      await _reviewService.deleteReview(_myReview!.id);
-      await _loadReviews();
+      final success = await _reviewViewModel.deleteReview();
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Review deleted'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-
-    if (diff.inDays == 0) {
-      if (diff.inHours == 0) return '${diff.inMinutes}m ago';
-      return '${diff.inHours}h ago';
-    } else if (diff.inDays < 7) {
-      return '${diff.inDays}d ago';
-    }
-    return '${date.day}/${date.month}/${date.year}';
   }
 }

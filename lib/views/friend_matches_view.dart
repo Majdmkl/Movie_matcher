@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/user.dart';
 import '../models/movie.dart';
 import '../viewmodels/auth_viewmodel.dart';
-import '../services/tmdb_service.dart';
+import '../viewmodels/friend_matches_viewmodel.dart';
 import 'movie_detail_view.dart';
 
 class FriendMatchesView extends StatefulWidget {
@@ -15,117 +15,118 @@ class FriendMatchesView extends StatefulWidget {
   State<FriendMatchesView> createState() => _FriendMatchesViewState();
 }
 
-class _FriendMatchesViewState extends State<FriendMatchesView> with SingleTickerProviderStateMixin {
-  final TMDBService _tmdbService = TMDBService();
-  
-  List<Movie> _friendMovies = [];
-  List<Movie> _friendTVShows = [];
-  bool _isLoading = true;
-  AppUser? _latestFriendData;
-  
+class _FriendMatchesViewState extends State<FriendMatchesView>
+    with SingleTickerProviderStateMixin {
+  late FriendMatchesViewModel _viewModel;
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    _viewModel = FriendMatchesViewModel();
     _tabController = TabController(length: 2, vsync: this);
-    _loadFriendItems();
+    _loadData();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _viewModel.dispose();
     super.dispose();
   }
 
-  Future<void> _loadFriendItems() async {
-    setState(() => _isLoading = true);
-
+  Future<void> _loadData() async {
     final authViewModel = context.read<AuthViewModel>();
-    _latestFriendData = await authViewModel.getFriendDetails(widget.friend.id);
+    final myLikedIds = authViewModel.currentUser?.likedMovieIds ?? [];
 
-    final friendData = _latestFriendData ?? widget.friend;
-
-    if (friendData.likedMovieIds.isNotEmpty) {
-      final items = await _tmdbService.getItemsByUniqueIds(friendData.likedMovieIds);
-      _friendMovies = items.where((m) => m.mediaType == 'movie').toList();
-      _friendTVShows = items.where((m) => m.mediaType == 'tv').toList();
-    }
-
-    setState(() => _isLoading = false);
+    await _viewModel.loadFriendMatches(
+      friend: widget.friend,
+      myLikedIds: myLikedIds,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final friendData = _latestFriendData ?? widget.friend;
+    return ChangeNotifierProvider.value(
+      value: _viewModel,
+      child: Consumer<FriendMatchesViewModel>(
+        builder: (context, viewModel, child) {
+          final friendData = viewModel.latestFriendData ?? widget.friend;
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.purple,
-              child: Text(
-                friendData.name.isNotEmpty ? friendData.name[0].toUpperCase() : '?',
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          return Scaffold(
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              title: Row(
                 children: [
-                  Text(
-                    "${friendData.name}'s Matches",
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.purple,
+                    child: Text(
+                      friendData.name.isNotEmpty
+                          ? friendData.name[0].toUpperCase()
+                          : '?',
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                    ),
                   ),
-                  Text(
-                    '${_friendMovies.length + _friendTVShows.length} items',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "${friendData.name}'s Matches",
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          '${viewModel.totalItems} items',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _loadData,
+                ),
+              ],
+              bottom: TabBar(
+                controller: _tabController,
+                indicatorColor: Colors.purple,
+                labelColor: Colors.purple,
+                unselectedLabelColor: Colors.grey,
+                tabs: [
+                  Tab(text: '🎬 Movies (${viewModel.movies.length})'),
+                  Tab(text: '📺 TV Shows (${viewModel.tvShows.length})'),
+                ],
+              ),
             ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadFriendItems,
-          ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.purple,
-          labelColor: Colors.purple,
-          unselectedLabelColor: Colors.grey,
-          tabs: [
-            Tab(text: '🎬 Movies (${_friendMovies.length})'),
-            Tab(text: '📺 TV Shows (${_friendTVShows.length})'),
-          ],
-        ),
-      ),
-      body: _isLoading
-          ? const Center(
+            body: viewModel.isLoading
+                ? const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   CircularProgressIndicator(color: Colors.purple),
                   SizedBox(height: 16),
-                  Text('Loading matches...', style: TextStyle(color: Colors.grey)),
+                  Text('Loading matches...',
+                      style: TextStyle(color: Colors.grey)),
                 ],
               ),
             )
-          : TabBarView(
+                : TabBarView(
               controller: _tabController,
               children: [
-                _buildGrid(_friendMovies, 'movie'),
-                _buildGrid(_friendTVShows, 'tv'),
+                _buildGrid(viewModel.movies, 'movie'),
+                _buildGrid(viewModel.tvShows, 'tv'),
               ],
             ),
+          );
+        },
+      ),
     );
   }
 
@@ -134,22 +135,25 @@ class _FriendMatchesViewState extends State<FriendMatchesView> with SingleTicker
       return _buildEmptyState(type);
     }
 
-    final currentUser = context.read<AuthViewModel>().currentUser;
-    final myLikedIds = currentUser?.likedMovieIds ?? [];
+    return Consumer2<FriendMatchesViewModel, AuthViewModel>(
+      builder: (context, matchesVM, authVM, child) {
+        final myLikedIds = authVM.currentUser?.likedMovieIds ?? [];
 
-    return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.65,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-      ),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        final isCommon = myLikedIds.contains(item.uniqueId);
-        return _buildItemTile(item, isCommon);
+        return GridView.builder(
+          padding: const EdgeInsets.all(16),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            childAspectRatio: 0.65,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+          ),
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            final item = items[index];
+            final isCommon = matchesVM.isCommonMatch(item.uniqueId, myLikedIds);
+            return _buildItemTile(item, isCommon);
+          },
+        );
       },
     );
   }
@@ -197,7 +201,9 @@ class _FriendMatchesViewState extends State<FriendMatchesView> with SingleTicker
           border: isCommon ? Border.all(color: Colors.green, width: 3) : null,
           boxShadow: [
             BoxShadow(
-              color: isCommon ? Colors.green.withOpacity(0.3) : Colors.black.withOpacity(0.3),
+              color: isCommon
+                  ? Colors.green.withOpacity(0.3)
+                  : Colors.black.withOpacity(0.3),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -211,19 +217,20 @@ class _FriendMatchesViewState extends State<FriendMatchesView> with SingleTicker
               // Poster
               item.posterUrl.isNotEmpty
                   ? Image.network(
-                      item.posterUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: const Color(0xFF1A1A1A),
-                          child: const Icon(Icons.movie, color: Colors.grey, size: 40),
-                        );
-                      },
-                    )
+                item.posterUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: const Color(0xFF1A1A1A),
+                    child: const Icon(Icons.movie,
+                        color: Colors.grey, size: 40),
+                  );
+                },
+              )
                   : Container(
-                      color: const Color(0xFF1A1A1A),
-                      child: const Icon(Icons.movie, color: Colors.grey, size: 40),
-                    ),
+                color: const Color(0xFF1A1A1A),
+                child: const Icon(Icons.movie, color: Colors.grey, size: 40),
+              ),
 
               // Gradient overlay
               Positioned(
@@ -283,7 +290,10 @@ class _FriendMatchesViewState extends State<FriendMatchesView> with SingleTicker
                   ),
                   child: Text(
                     isTV ? 'TV' : 'MOVIE',
-                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -306,7 +316,10 @@ class _FriendMatchesViewState extends State<FriendMatchesView> with SingleTicker
                         SizedBox(width: 4),
                         Text(
                           'MATCH!',
-                          style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),

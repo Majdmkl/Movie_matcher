@@ -444,7 +444,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     return Stack(
       alignment: Alignment.center,
       children: [
-        // Bakgrundskort
+        // Background card
         if (nextItem != null)
           Positioned.fill(
             child: Padding(
@@ -458,7 +458,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
               ),
             ),
           ),
-        // Huvudkort
+        // Main card
         Positioned.fill(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -533,7 +533,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                     child: const Icon(Icons.movie, color: Colors.grey, size: 60),
                   ),
 
-            // Gradient overlay - mer kompakt
+            // Gradient overlay
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
@@ -600,7 +600,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
               ),
             ],
 
-            // Content - kompakt
+            // Content
             Positioned(
               bottom: 0,
               left: 0,
@@ -854,7 +854,6 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     );
   }
 
-  // Quick genres för scroll-lista
   static const List<String> _quickMovieGenres = [
     'Action', 'Comedy', 'Drama', 'Horror', 'Sci-Fi', 'Romance', 'Thriller', 'Animation',
   ];
@@ -863,7 +862,6 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     'Drama', 'Comedy', 'Crime', 'Animation', 'Reality', 'Documentary',
   ];
 
-  // Alla genres för popup
   static const List<String> _allMovieGenres = [
     'Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary',
     'Drama', 'Family', 'Fantasy', 'History', 'Horror', 'Music', 'Mystery',

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/swipe_viewmodel.dart';
+import '../viewmodels/profile_viewmodel.dart';
 import 'friends_view.dart';
 
 class ProfileView extends StatefulWidget {
@@ -11,14 +12,17 @@ class ProfileView extends StatefulWidget {
   State<ProfileView> createState() => _ProfileViewState();
 }
 
-class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStateMixin {
+class _ProfileViewState extends State<ProfileView>
+    with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  late ProfileViewModel _profileViewModel;
 
   @override
   void initState() {
     super.initState();
+    _profileViewModel = ProfileViewModel();
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -26,15 +30,17 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
     );
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-    );
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero).animate(
+          CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+        );
     _animationController.forward();
   }
 
   @override
   void dispose() {
     _animationController.dispose();
+    _profileViewModel.dispose();
     super.dispose();
   }
 
@@ -55,77 +61,85 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
           ),
         ),
         child: SafeArea(
-          child: Consumer2<AuthViewModel, SwipeViewModel>(
-            builder: (context, authViewModel, swipeViewModel, child) {
-              final user = authViewModel.currentUser;
+          child: MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: _profileViewModel),
+            ],
+            child: Consumer3<AuthViewModel, SwipeViewModel, ProfileViewModel>(
+              builder: (context, authViewModel, swipeViewModel, profileVM, child) {
+                final user = authViewModel.currentUser;
 
-              return FadeTransition(
-                opacity: _fadeAnimation,
-                child: SlideTransition(
-                  position: _slideAnimation,
-                  child: CustomScrollView(
-                    slivers: [
-                      // App Bar
-                      SliverAppBar(
-                        backgroundColor: Colors.transparent,
-                        elevation: 0,
-                        pinned: true,
-                        expandedHeight: 0,
-                        actions: [
-                          IconButton(
-                            icon: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (user != null) {
+                    profileVM.updateStats(
+                      user: user,
+                      moviesCount: swipeViewModel.likedMoviesCount,
+                      tvShowsCount: swipeViewModel.likedTVShowsCount,
+                    );
+                  }
+                });
+
+                return FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: CustomScrollView(
+                      slivers: [
+                        // App Bar
+                        SliverAppBar(
+                          backgroundColor: Colors.transparent,
+                          elevation: 0,
+                          pinned: true,
+                          expandedHeight: 0,
+                          actions: [
+                            IconButton(
+                              icon: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.logout_rounded,
+                                    color: Colors.white, size: 20),
                               ),
-                              child: const Icon(Icons.logout_rounded, color: Colors.white, size: 20),
+                              onPressed: () => _showLogoutDialog(context),
                             ),
-                            onPressed: () => _showLogoutDialog(context),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                      ),
+                            const SizedBox(width: 8),
+                          ],
+                        ),
 
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Column(
-                            children: [
-                              // Profile Header with Avatar
-                              _buildProfileHeader(user, swipeViewModel),
-                              const SizedBox(height: 32),
-
-                              // Stats Cards
-                              _buildStatsSection(swipeViewModel, authViewModel),
-                              const SizedBox(height: 24),
-
-                              // Quick Actions
-                              _buildQuickActions(context, authViewModel),
-                              const SizedBox(height: 24),
-
-                              // Activity Summary
-                              _buildActivitySummary(swipeViewModel),
-                              const SizedBox(height: 40),
-                            ],
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Column(
+                              children: [
+                                _buildProfileHeader(user, profileVM),
+                                const SizedBox(height: 32),
+                                _buildStatsSection(swipeViewModel, authViewModel),
+                                const SizedBox(height: 24),
+                                _buildQuickActions(context, authViewModel),
+                                const SizedBox(height: 24),
+                                _buildActivitySummary(profileVM),
+                                const SizedBox(height: 40),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildProfileHeader(user, SwipeViewModel swipeViewModel) {
-    final totalLiked = swipeViewModel.totalLikedCount;
-    final level = _calculateLevel(totalLiked);
-    final progress = _calculateProgress(totalLiked);
+  Widget _buildProfileHeader(user, ProfileViewModel profileVM) {
+    final level = profileVM.level;
+    final progress = profileVM.progress;
 
     return Column(
       children: [
@@ -179,7 +193,9 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
               ),
               child: Center(
                 child: Text(
-                  user?.name.isNotEmpty == true ? user!.name[0].toUpperCase() : '?',
+                  user?.name.isNotEmpty == true
+                      ? user!.name[0].toUpperCase()
+                      : '?',
                   style: const TextStyle(
                     fontSize: 42,
                     fontWeight: FontWeight.bold,
@@ -231,6 +247,28 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
         ),
         const SizedBox(height: 4),
 
+        // Level title
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: profileVM.getLevelGradientColors()
+                  .map((c) => Color(c))
+                  .toList(),
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            profileVM.getLevelTitle(),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+
         // Email with icon
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -258,7 +296,7 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
               Icon(Icons.calendar_today, size: 12, color: Colors.grey[500]),
               const SizedBox(width: 6),
               Text(
-                'Member since ${_formatDate(user?.createdAt ?? DateTime.now())}',
+                'Member since ${profileVM.formatMemberSince(user?.createdAt ?? DateTime.now())}',
                 style: TextStyle(color: Colors.grey[500], fontSize: 12),
               ),
             ],
@@ -268,7 +306,8 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildStatsSection(SwipeViewModel swipeViewModel, AuthViewModel authViewModel) {
+  Widget _buildStatsSection(
+      SwipeViewModel swipeViewModel, AuthViewModel authViewModel) {
     return Row(
       children: [
         Expanded(
@@ -350,7 +389,8 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
           icon: Icons.people_rounded,
           iconGradient: const [Color(0xFF2196F3), Color(0xFF00BCD4)],
           title: 'Friends',
-          subtitle: '${authViewModel.currentUser?.friendIds.length ?? 0} connections',
+          subtitle:
+          '${authViewModel.currentUser?.friendIds.length ?? 0} connections',
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const FriendsView()),
@@ -440,7 +480,8 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
                   color: Colors.white.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(Icons.chevron_right, color: Colors.grey[600], size: 20),
+                child: Icon(Icons.chevron_right,
+                    color: Colors.grey[600], size: 20),
               ),
             ],
           ),
@@ -449,11 +490,7 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildActivitySummary(SwipeViewModel swipeViewModel) {
-    final movies = swipeViewModel.likedMoviesCount;
-    final tvShows = swipeViewModel.likedTVShowsCount;
-    final total = movies + tvShows;
-
+  Widget _buildActivitySummary(ProfileViewModel profileVM) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -473,7 +510,8 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.local_fire_department, color: Colors.orange[400], size: 24),
+              Icon(Icons.local_fire_department,
+                  color: Colors.orange[400], size: 24),
               const SizedBox(width: 8),
               const Text(
                 'Your Activity',
@@ -489,11 +527,20 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildMiniStat('Total Liked', total.toString(), Colors.green),
-              Container(width: 1, height: 40, color: Colors.white.withOpacity(0.1)),
-              _buildMiniStat('Movies', '${((movies / (total == 0 ? 1 : total)) * 100).round()}%', Colors.purple),
-              Container(width: 1, height: 40, color: Colors.white.withOpacity(0.1)),
-              _buildMiniStat('TV Shows', '${((tvShows / (total == 0 ? 1 : total)) * 100).round()}%', Colors.blue),
+              _buildMiniStat(
+                  'Total Liked', profileVM.totalLiked.toString(), Colors.green),
+              Container(
+                  width: 1,
+                  height: 40,
+                  color: Colors.white.withOpacity(0.1)),
+              _buildMiniStat('Movies',
+                  '${profileVM.moviesPercentage}%', Colors.purple),
+              Container(
+                  width: 1,
+                  height: 40,
+                  color: Colors.white.withOpacity(0.1)),
+              _buildMiniStat(
+                  'TV Shows', '${profileVM.tvShowsPercentage}%', Colors.blue),
             ],
           ),
         ],
@@ -521,29 +568,6 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
     );
   }
 
-  int _calculateLevel(int total) {
-    if (total < 10) return 1;
-    if (total < 25) return 2;
-    if (total < 50) return 3;
-    if (total < 100) return 4;
-    if (total < 200) return 5;
-    return 6;
-  }
-
-  double _calculateProgress(int total) {
-    final thresholds = [0, 10, 25, 50, 100, 200, 500];
-    final level = _calculateLevel(total);
-    if (level >= 6) return 1.0;
-    final prevThreshold = thresholds[level - 1];
-    final nextThreshold = thresholds[level];
-    return (total - prevThreshold) / (nextThreshold - prevThreshold);
-  }
-
-  String _formatDate(DateTime date) {
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return '${months[date.month - 1]} ${date.year}';
-  }
-
   void _showComingSoonSnackbar(BuildContext context, String feature) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -555,8 +579,10 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
     );
   }
 
-  void _showEditNameDialog(BuildContext context, AuthViewModel authViewModel) {
-    final controller = TextEditingController(text: authViewModel.currentUser?.name);
+  void _showEditNameDialog(
+      BuildContext context, AuthViewModel authViewModel) {
+    final controller =
+    TextEditingController(text: authViewModel.currentUser?.name);
 
     showModalBottomSheet(
       context: context,
@@ -613,7 +639,8 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
                     borderRadius: BorderRadius.circular(16),
                     borderSide: BorderSide.none,
                   ),
-                  prefixIcon: const Icon(Icons.person_outline, color: Colors.purple),
+                  prefixIcon:
+                  const Icon(Icons.person_outline, color: Colors.purple),
                 ),
               ),
               const SizedBox(height: 24),
@@ -644,7 +671,8 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
                       ),
                       child: const Text(
                         'Save Changes',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
@@ -688,9 +716,11 @@ class _ProfileViewState extends State<ProfileView> with SingleTickerProviderStat
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
             ),
-            child: const Text('Logout', style: TextStyle(color: Colors.white)),
+            child:
+            const Text('Logout', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

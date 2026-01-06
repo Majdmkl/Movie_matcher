@@ -148,7 +148,6 @@ class TMDBService {
   List<WatchProvider> _parseWatchProviders(Map<String, dynamic>? results, String region) {
     if (results == null) return [];
 
-    // Försök med angiven region, annars fallback till US
     final regionData = results[region] ?? results['US'];
     if (regionData == null) return [];
 
