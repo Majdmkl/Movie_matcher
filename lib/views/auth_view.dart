@@ -52,7 +52,6 @@ class _AuthViewState extends State<AuthView> {
     }
 
     if (success && mounted) {
-      // Navigation hanteras av Consumer i main.dart
     }
   }
 

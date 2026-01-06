@@ -344,7 +344,7 @@ class _MovieDetailViewState extends State<MovieDetailView> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Streaming services (flatrate)
+                // Streaming services
                 if (_watchProviders.any((p) => p.type == 'stream')) ...[
                   _buildProviderCategory(
                     'Stream',

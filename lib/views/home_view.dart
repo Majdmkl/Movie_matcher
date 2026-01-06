@@ -354,9 +354,8 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: quickGenres.length + 2, // +2 för menu och All
+            itemCount: quickGenres.length + 2,
             itemBuilder: (context, index) {
-              // Första är menu-knappen
               if (index == 0) {
                 return GestureDetector(
                   onTap: () => _showGenreBottomSheet(context, viewModel),
@@ -372,7 +371,6 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                   ),
                 );
               }
-              // Andra är "All"
               if (index == 1) {
                 return _buildGenreChip(
                   'All',
@@ -515,7 +513,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Poster - tar hela utrymmet
+            // Poster
             movie.posterUrl.isNotEmpty
                 ? Image.network(
                     movie.posterUrl,
@@ -865,7 +863,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     'Drama', 'Comedy', 'Crime', 'Animation', 'Reality', 'Documentary',
   ];
 
-  // Alla genres för popup (inkl Arabic och Turkish)
+  // Alla genres för popup
   static const List<String> _allMovieGenres = [
     'Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary',
     'Drama', 'Family', 'Fantasy', 'History', 'Horror', 'Music', 'Mystery',
