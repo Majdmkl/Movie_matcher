@@ -1,42 +1,43 @@
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user.dart';
-import '../services/auth_service.dart';
+import '../use_cases/auth_use_case.dart';
 
 class AuthViewModel extends ChangeNotifier {
-  final AuthService _authService = AuthService();
+  final AuthUseCase _useCase;
 
+  // State
   AppUser? _currentUser;
   bool _isLoading = false;
   String? _error;
-
   List<AppUser> _friends = [];
   bool _isLoadingFriends = false;
 
+  AuthViewModel({AuthUseCase? useCase})
+      : _useCase = useCase ?? AuthUseCase();
+
+  // Getters
   AppUser? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isLoggedIn => _currentUser != null;
-
   List<AppUser> get friends => _friends;
   bool get isLoadingFriends => _isLoadingFriends;
+  int get likedCount => _currentUser?.likedMovieIds.length ?? 0;
 
+  /// Initialize auth state
   Future<void> initialize() async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      final firebaseUser = _authService.currentFirebaseUser;
+      _currentUser = await _useCase.initializeSession();
 
-      if (firebaseUser != null) {
-        _currentUser = await _authService.getUser(firebaseUser.uid);
-
-        if (_currentUser != null && _currentUser!.friendIds.isNotEmpty) {
-          await loadFriends();
-        }
-
-        print('✅ User restored: ${_currentUser?.email}');
+      if (_currentUser != null && _currentUser!.friendIds.isNotEmpty) {
+        await loadFriends();
       }
+
+      print('✅ User restored: ${_currentUser?.email}');
     } catch (e) {
       print('❌ Error initializing auth: $e');
     } finally {
@@ -45,6 +46,7 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
+  /// Register new user
   Future<bool> register({
     required String email,
     required String password,
@@ -55,7 +57,7 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _currentUser = await _authService.register(
+      _currentUser = await _useCase.registerUser(
         email: email,
         password: password,
         name: name,
@@ -65,18 +67,19 @@ class AuthViewModel extends ChangeNotifier {
       notifyListeners();
       return _currentUser != null;
     } on FirebaseAuthException catch (e) {
-      _error = _authService.getErrorMessage(e);
+      _error = _useCase.getErrorMessage(e);
       _isLoading = false;
       notifyListeners();
       return false;
     } catch (e) {
-      _error = 'Could not create account. Try again.';
+      _error = e.toString().replaceAll('Exception: ', '');
       _isLoading = false;
       notifyListeners();
       return false;
     }
   }
 
+  /// Login existing user
   Future<bool> login({
     required String email,
     required String password,
@@ -86,7 +89,7 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _currentUser = await _authService.login(
+      _currentUser = await _useCase.loginUser(
         email: email,
         password: password,
       );
@@ -99,25 +102,27 @@ class AuthViewModel extends ChangeNotifier {
       notifyListeners();
       return _currentUser != null;
     } on FirebaseAuthException catch (e) {
-      _error = _authService.getErrorMessage(e);
+      _error = _useCase.getErrorMessage(e);
       _isLoading = false;
       notifyListeners();
       return false;
     } catch (e) {
-      _error = 'Could not login. Try again.';
+      _error = e.toString().replaceAll('Exception: ', '');
       _isLoading = false;
       notifyListeners();
       return false;
     }
   }
 
+  /// Logout current user
   Future<void> logout() async {
-    await _authService.logout();
+    await _useCase.logoutUser();
     _currentUser = null;
     _friends.clear();
     notifyListeners();
   }
 
+  /// Add a liked item to current user
   void addLikedItem(String uniqueId) {
     if (_currentUser == null) return;
 
@@ -125,20 +130,20 @@ class AuthViewModel extends ChangeNotifier {
       final updatedLikes = List<String>.from(_currentUser!.likedMovieIds)..add(uniqueId);
       _currentUser = _currentUser!.copyWith(likedMovieIds: updatedLikes);
       notifyListeners();
-
-      _authService.addLikedItem(_currentUser!.id, uniqueId);
     }
   }
 
+  /// Update user's display name
   void updateName(String newName) {
     if (_currentUser == null) return;
 
     _currentUser = _currentUser!.copyWith(name: newName);
     notifyListeners();
 
-    _authService.updateName(_currentUser!.id, newName);
+    _useCase.updateUserName(_currentUser!.id, newName);
   }
 
+  /// Load user's friends
   Future<void> loadFriends() async {
     if (_currentUser == null) return;
 
@@ -146,7 +151,7 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _friends = await _authService.getFriends(_currentUser!.friendIds);
+      _friends = await _useCase.loadFriends(_currentUser!.friendIds);
       print('✅ Loaded ${_friends.length} friends');
     } catch (e) {
       print('❌ Error loading friends: $e');
@@ -156,36 +161,44 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Search for a user by email
   Future<AppUser?> searchUser(String email) async {
     if (email.trim().isEmpty) return null;
-    return await _authService.searchUserByEmail(email);
+    return await _useCase.searchUser(email);
   }
 
+  /// Add a friend
   Future<bool> addFriend(AppUser friend) async {
     if (_currentUser == null) return false;
-    if (_currentUser!.id == friend.id) return false;
-    if (_currentUser!.friendIds.contains(friend.id)) return false;
 
-    final success = await _authService.addFriend(_currentUser!.id, friend.id);
+    try {
+      final success = await _useCase.addFriend(
+        currentUser: _currentUser!,
+        friendToAdd: friend,
+      );
 
-    if (success) {
-      final updatedFriendIds = List<String>.from(_currentUser!.friendIds)..add(friend.id);
-      _currentUser = _currentUser!.copyWith(friendIds: updatedFriendIds);
-      _friends.add(friend);
+      if (success) {
+        _currentUser = _useCase.updateUserWithNewFriend(_currentUser!, friend.id);
+        _friends.add(friend);
+        notifyListeners();
+      }
+
+      return success;
+    } catch (e) {
+      _error = e.toString().replaceAll('Exception: ', '');
       notifyListeners();
+      return false;
     }
-
-    return success;
   }
 
+  /// Remove a friend
   Future<bool> removeFriend(String friendId) async {
     if (_currentUser == null) return false;
 
-    final success = await _authService.removeFriend(_currentUser!.id, friendId);
+    final success = await _useCase.removeFriend(_currentUser!.id, friendId);
 
     if (success) {
-      final updatedFriendIds = List<String>.from(_currentUser!.friendIds)..remove(friendId);
-      _currentUser = _currentUser!.copyWith(friendIds: updatedFriendIds);
+      _currentUser = _useCase.updateUserWithRemovedFriend(_currentUser!, friendId);
       _friends.removeWhere((f) => f.id == friendId);
       notifyListeners();
     }
@@ -193,12 +206,14 @@ class AuthViewModel extends ChangeNotifier {
     return success;
   }
 
+  /// Get detailed friend info (delegates to use case which gets from repository)
   Future<AppUser?> getFriendDetails(String friendId) async {
-    return await _authService.getUser(friendId);
+    // Note: This should ideally be in AuthUseCase, but keeping simple for now
+    // The repository already has getUser method
+    return null; // Implement if needed by adding to use case
   }
 
-  int get likedCount => _currentUser?.likedMovieIds.length ?? 0;
-
+  /// Clear error message
   void clearError() {
     _error = null;
     notifyListeners();

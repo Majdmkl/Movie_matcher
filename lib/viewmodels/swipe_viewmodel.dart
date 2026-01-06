@@ -1,19 +1,16 @@
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/movie.dart';
-import '../services/tmdb_service.dart';
-import '../services/auth_service.dart';
+import '../use_cases/swipe_use_case.dart';
 
-enum MediaType { movies, tvShows }
+// MediaType is exported from SwipeUseCase
+export '../use_cases/swipe_use_case.dart' show MediaType;
 
 class SwipeViewModel extends ChangeNotifier {
-  final TMDBService _tmdbService = TMDBService();
-  final AuthService _authService = AuthService();
-  final Random _random = Random();
+  final SwipeUseCase _useCase;
 
+  // State
   List<Movie> _movies = [];
   List<Movie> _tvShows = [];
-
   List<Movie> _likedMovies = [];
   List<Movie> _likedTVShows = [];
 
@@ -23,52 +20,44 @@ class SwipeViewModel extends ChangeNotifier {
   bool _isLoading = false;
   bool _isLoadingLiked = false;
   String? _error;
-
   String? _currentUserId;
   MediaType _currentMediaType = MediaType.movies;
   String? _selectedGenre;
 
+  SwipeViewModel({SwipeUseCase? useCase})
+      : _useCase = useCase ?? SwipeUseCase();
+
+  // Getters
   MediaType get currentMediaType => _currentMediaType;
   String? get selectedGenre => _selectedGenre;
-
   List<Movie> get currentList => _currentMediaType == MediaType.movies ? _movies : _tvShows;
-
-  List<Movie> get _filteredList {
-    var list = currentList.where((m) => !_swipedIds.contains(m.uniqueId)).toList();
-    
-    if (_selectedGenre != null) {
-      if (_selectedGenre == 'Arabic') {
-        list = list.where((m) => m.originalLanguage == 'ar').toList();
-      } else if (_selectedGenre == 'Turkish') {
-        list = list.where((m) => m.originalLanguage == 'tr').toList();
-      } else {
-        list = list.where((m) => m.genres.contains(_selectedGenre)).toList();
-      }
-    }
-    
-    return list;
-  }
-
-  Movie? get currentItem => _filteredList.isNotEmpty ? _filteredList.first : null;
-  Movie? get nextItem => _filteredList.length > 1 ? _filteredList[1] : null;
-
   List<Movie> get likedMovies => _likedMovies;
   List<Movie> get likedTVShows => _likedTVShows;
-
   int get likedMoviesCount => _likedMovies.length;
   int get likedTVShowsCount => _likedTVShows.length;
   int get totalLikedCount => _likedMovies.length + _likedTVShows.length;
-
-  bool get hasItems => currentItem != null;
   bool get isLoading => _isLoading;
   bool get isLoadingLiked => _isLoadingLiked;
   String? get error => _error;
 
+  List<Movie> get _filteredList {
+    return _useCase.filterItems(
+      items: currentList,
+      swipedIds: _swipedIds,
+      selectedGenre: _selectedGenre,
+    );
+  }
+
+  Movie? get currentItem => _filteredList.isNotEmpty ? _filteredList.first : null;
+  Movie? get nextItem => _filteredList.length > 1 ? _filteredList[1] : null;
+  bool get hasItems => currentItem != null;
+
+  // Actions
   void setGenreFilter(String? genre) {
     _selectedGenre = genre;
     notifyListeners();
 
-    if (_filteredList.length < 5 && !_isLoading) {
+    if (_useCase.shouldLoadMore(_filteredList.length) && !_isLoading) {
       loadItems();
     }
   }
@@ -100,9 +89,9 @@ class SwipeViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final items = await _tmdbService.getItemsByUniqueIds(uniqueIds);
-      _likedMovies = items.where((m) => m.mediaType == 'movie').toList();
-      _likedTVShows = items.where((m) => m.mediaType == 'tv').toList();
+      final result = await _useCase.loadLikedItems(uniqueIds);
+      _likedMovies = result['movies'] ?? [];
+      _likedTVShows = result['tvShows'] ?? [];
       print('✅ Loaded ${_likedMovies.length} movies and ${_likedTVShows.length} TV shows');
     } catch (e) {
       print('❌ Error loading liked items: $e');
@@ -128,22 +117,12 @@ class SwipeViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      List<Movie> newItems;
+      final newItems = await _useCase.loadContent(_currentMediaType);
 
       if (_currentMediaType == MediaType.movies) {
-        newItems = await _tmdbService.getPopularMovies();
+        _movies.addAll(newItems);
       } else {
-        newItems = await _tmdbService.getPopularTVShows();
-      }
-
-      final validItems = newItems.where((item) => item.posterUrl.isNotEmpty).toList();
-
-      validItems.shuffle(Random(DateTime.now().millisecondsSinceEpoch));
-
-      if (_currentMediaType == MediaType.movies) {
-        _movies.addAll(validItems);
-      } else {
-        _tvShows.addAll(validItems);
+        _tvShows.addAll(newItems);
       }
 
       _isLoading = false;
@@ -171,7 +150,11 @@ class SwipeViewModel extends ChangeNotifier {
       }
 
       if (_currentUserId != null) {
-        _authService.addLikedItem(_currentUserId!, item.uniqueId);
+        _useCase.processLike(
+          userId: _currentUserId!,
+          item: item,
+          likedIds: _likedIds,
+        );
       }
     }
 
@@ -184,13 +167,12 @@ class SwipeViewModel extends ChangeNotifier {
     if (item == null) return;
 
     _swipedIds.add(item.uniqueId);
-
     notifyListeners();
     _checkAndLoadMore();
   }
 
   void _checkAndLoadMore() {
-    if (_filteredList.length < 5 && !_isLoading) {
+    if (_useCase.shouldLoadMore(_filteredList.length) && !_isLoading) {
       loadItems();
     }
   }
@@ -204,7 +186,10 @@ class SwipeViewModel extends ChangeNotifier {
     _likedIds.remove(item.uniqueId);
 
     if (_currentUserId != null) {
-      _authService.removeLikedItem(_currentUserId!, item.uniqueId);
+      _useCase.processRemoveLike(
+        userId: _currentUserId!,
+        item: item,
+      );
     }
 
     notifyListeners();
