@@ -27,11 +27,15 @@ class SwipeRepository {
     return await _tmdbService.getItemsByUniqueIds(uniqueIds);
   }
 
-  void saveLikedItem(String userId, String uniqueId) {
-    _authService.addLikedItem(userId, uniqueId);
+  Future<void> saveLikedItem(String userId, String uniqueId) async {
+    print('🔵 SwipeRepository.saveLikedItem: userId=$userId, uniqueId=$uniqueId');
+    await _authService.addLikedItem(userId, uniqueId);
+    print('✅ SwipeRepository.saveLikedItem completed');
   }
 
-  void removeLikedItem(String userId, String uniqueId) {
-    _authService.removeLikedItem(userId, uniqueId);
+  Future<void> removeLikedItem(String userId, String uniqueId) async {
+    print('🔵 SwipeRepository.removeLikedItem: userId=$userId, uniqueId=$uniqueId');
+    await _authService.removeLikedItem(userId, uniqueId);
+    print('✅ SwipeRepository.removeLikedItem completed');
   }
 }

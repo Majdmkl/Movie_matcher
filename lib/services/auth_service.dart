@@ -113,34 +113,40 @@ class AuthService {
     }
   }
 
-  void addLikedItem(String userId, String uniqueId) {
-    _firestore.collection(_collection).doc(userId).update({
-      'liked_movie_ids': FieldValue.arrayUnion([uniqueId]),
-    }).then((_) {
+  Future<void> addLikedItem(String userId, String uniqueId) async {
+    try {
+      await _firestore.collection(_collection).doc(userId).update({
+        'liked_movie_ids': FieldValue.arrayUnion([uniqueId]),
+      });
       print('✅ Saved like to Firebase: $uniqueId');
-    }).catchError((e) {
+    } catch (e) {
       print('⚠️ Could not save like to Firebase: $e');
-    });
+      rethrow;
+    }
   }
 
-  void removeLikedItem(String userId, String uniqueId) {
-    _firestore.collection(_collection).doc(userId).update({
-      'liked_movie_ids': FieldValue.arrayRemove([uniqueId]),
-    }).then((_) {
+  Future<void> removeLikedItem(String userId, String uniqueId) async {
+    try {
+      await _firestore.collection(_collection).doc(userId).update({
+        'liked_movie_ids': FieldValue.arrayRemove([uniqueId]),
+      });
       print('✅ Removed like from Firebase: $uniqueId');
-    }).catchError((e) {
+    } catch (e) {
       print('⚠️ Could not remove like from Firebase: $e');
-    });
+      rethrow;
+    }
   }
 
-  void updateName(String userId, String newName) {
-    _firestore.collection(_collection).doc(userId).update({
-      'name': newName,
-    }).then((_) {
+  Future<void> updateName(String userId, String newName) async {
+    try {
+      await _firestore.collection(_collection).doc(userId).update({
+        'name': newName,
+      });
       print('✅ Updated name in Firebase');
-    }).catchError((e) {
+    } catch (e) {
       print('⚠️ Could not update name in Firebase: $e');
-    });
+      rethrow;
+    }
   }
 
   Future<AppUser?> searchUserByEmail(String email) async {

@@ -59,21 +59,29 @@ class SwipeUseCase {
     return {'movies': movies, 'tvShows': tvShows};
   }
 
-  void processLike({
+  Future<void> processLike({
     required String userId,
     required Movie item,
     required Set<String> likedIds,
-  }) {
+  }) async {
+    print('🔵 SwipeUseCase.processLike: ${item.uniqueId}');
+
     if (!likedIds.contains(item.uniqueId)) {
-      _repository.saveLikedItem(userId, item.uniqueId);
+      print('⚠️ processLike called but item not in likedIds set');
     }
+
+    await _repository.saveLikedItem(userId, item.uniqueId);
+    print('✅ SwipeUseCase.processLike completed');
   }
 
-  void processRemoveLike({
+  Future<void> processRemoveLike({
     required String userId,
     required Movie item,
-  }) {
-    _repository.removeLikedItem(userId, item.uniqueId);
+  }) async {
+    print('🔵 SwipeUseCase.processRemoveLike: ${item.uniqueId}');
+
+    await _repository.removeLikedItem(userId, item.uniqueId);
+    print('✅ SwipeUseCase.processRemoveLike completed');
   }
 
   bool shouldLoadMore(int remainingItems, {int threshold = 5}) {
